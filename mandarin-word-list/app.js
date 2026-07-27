@@ -162,10 +162,70 @@
   var hanziInput = document.getElementById("hanzi-input");
   var meaningInput = document.getElementById("meaning-input");
   var formError = document.getElementById("form-error");
+  var candidatesPanel = document.getElementById("candidates-panel");
+
+  // Pinyin -> [[hanzi, definition], ...] lookup, loaded from data/pinyin-hanzi.js.
+  var PINYIN_HANZI_DATA = window.PINYIN_HANZI_DATA || {};
+
+  // The syllable currently being typed: the last whitespace-separated token,
+  // as long as the caret hasn't moved past it with a trailing space.
+  function currentSyllableToken() {
+    var value = pinyinInput.value;
+    if (value === "" || /\s$/.test(value)) return "";
+    var tokens = value.trim().split(/\s+/);
+    return tokens[tokens.length - 1];
+  }
+
+  function clearCandidates() {
+    candidatesPanel.innerHTML = "";
+  }
+
+  function renderCandidates() {
+    clearCandidates();
+    var token = currentSyllableToken();
+    if (!/[1-5]$/.test(token)) return; // only once the tone number is typed
+
+    var converted = convertSyllable(token);
+    var candidates = PINYIN_HANZI_DATA[converted];
+    if (!candidates || !candidates.length) return;
+
+    candidates.forEach(function (pair) {
+      var hanzi = pair[0];
+      var definition = pair[1];
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "candidate-btn";
+      btn.title = definition;
+
+      var charSpan = document.createElement("span");
+      charSpan.className = "cb-char";
+      charSpan.textContent = hanzi;
+
+      var defSpan = document.createElement("span");
+      defSpan.className = "cb-def";
+      defSpan.textContent = definition;
+
+      btn.appendChild(charSpan);
+      btn.appendChild(defSpan);
+
+      btn.addEventListener("click", function () {
+        hanziInput.value += hanzi;
+        // commit the syllable (numeral -> diacritic) and start the next one
+        pinyinInput.value = pinyinInput.value.replace(/\S+$/, converted) + " ";
+        pinyinPreview.textContent = convertPinyin(pinyinInput.value) || " ";
+        clearCandidates();
+        pinyinInput.focus();
+      });
+
+      candidatesPanel.appendChild(btn);
+    });
+  }
 
   pinyinInput.addEventListener("input", function () {
     var converted = convertPinyin(pinyinInput.value);
-    pinyinPreview.textContent = converted || " ";
+    pinyinPreview.textContent = converted || " ";
+    renderCandidates();
   });
 
   function makeId() {
@@ -199,7 +259,8 @@
     render();
 
     form.reset();
-    pinyinPreview.textContent = " ";
+    pinyinPreview.textContent = " ";
+    clearCandidates();
     hanziInput.focus();
   });
 

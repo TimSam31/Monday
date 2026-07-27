@@ -20,10 +20,11 @@
           <label for="pinyin-input">Pinyin (use tone numbers 1&ndash;4, 5 for neutral)</label>
           <input type="text" id="pinyin-input" placeholder="e.g. ni3 hao3" autocomplete="off">
           <div class="preview" id="pinyin-preview" aria-live="polite">&nbsp;</div>
+          <div class="candidates" id="candidates-panel" aria-live="polite"></div>
         </div>
 
         <div class="field">
-          <label for="hanzi-input">Hanzi</label>
+          <label for="hanzi-input">Hanzi <span class="hint">(click a candidate above to append, or type directly)</span></label>
           <input type="text" id="hanzi-input" placeholder="e.g. 你好" autocomplete="off">
         </div>
 
@@ -69,6 +70,7 @@
     </section>
   </main>
 
+  <script src="data/pinyin-hanzi.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

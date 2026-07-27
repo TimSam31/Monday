@@ -66,6 +66,55 @@ input[type="text"], input[type="search"] {
   color: var(--accent);
 }
 
+.hint {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-height: 6.5rem;
+  overflow-y: auto;
+}
+
+.candidate-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 2.6rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.candidate-btn:hover, .candidate-btn:focus {
+  border-color: var(--accent);
+  background: var(--panel);
+  color: var(--accent);
+}
+
+.candidate-btn .cb-char {
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+.candidate-btn .cb-def {
+  font-size: 0.65rem;
+  color: var(--muted);
+  max-width: 5.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 button, .file-btn {
   padding: 0.55rem 1rem;
   border-radius: 6px;
