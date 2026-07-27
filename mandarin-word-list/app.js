@@ -68,10 +68,33 @@
 
   // ---- storage ----
 
+  // Meaning is stored as an array of tags. Accepts a legacy single-string
+  // meaning (from data saved before tags existed) and wraps it as one tag.
+  function normalizeMeaning(raw) {
+    if (Array.isArray(raw)) {
+      return raw.map(function (t) { return String(t).trim(); }).filter(Boolean);
+    }
+    if (typeof raw === "string" && raw.trim()) {
+      return [raw.trim()];
+    }
+    return [];
+  }
+
+  function normalizeEntry(e) {
+    return {
+      id: e.id || makeId(),
+      hanzi: e.hanzi,
+      pinyin: e.pinyin,
+      meaning: normalizeMeaning(e.meaning),
+      createdAt: e.createdAt || new Date().toISOString()
+    };
+  }
+
   function loadEntries() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map(normalizeEntry) : [];
     } catch (e) {
       return [];
     }
@@ -102,7 +125,7 @@
       return (
         e.hanzi.toLowerCase().indexOf(query) !== -1 ||
         e.pinyin.toLowerCase().indexOf(query) !== -1 ||
-        e.meaning.toLowerCase().indexOf(query) !== -1
+        e.meaning.some(function (tag) { return tag.toLowerCase().indexOf(query) !== -1; })
       );
     });
 
@@ -122,7 +145,13 @@
         pinyinTd.textContent = entry.pinyin;
 
         var meaningTd = document.createElement("td");
-        meaningTd.textContent = entry.meaning;
+        meaningTd.className = "meaning-cell";
+        entry.meaning.forEach(function (tag) {
+          var pill = document.createElement("span");
+          pill.className = "meaning-pill";
+          pill.textContent = tag;
+          meaningTd.appendChild(pill);
+        });
 
         var dateTd = document.createElement("td");
         dateTd.className = "date";
@@ -161,8 +190,70 @@
   var pinyinPreview = document.getElementById("pinyin-preview");
   var hanziInput = document.getElementById("hanzi-input");
   var meaningInput = document.getElementById("meaning-input");
+  var meaningTagContainer = document.getElementById("meaning-tag-input");
   var formError = document.getElementById("form-error");
   var candidatesPanel = document.getElementById("candidates-panel");
+
+  // ---- meaning tags ----
+
+  var meaningTags = [];
+
+  function renderMeaningTags() {
+    Array.prototype.slice
+      .call(meaningTagContainer.querySelectorAll(".tag-chip"))
+      .forEach(function (el) { el.remove(); });
+
+    meaningTags.forEach(function (tag, index) {
+      var chip = document.createElement("span");
+      chip.className = "tag-chip";
+
+      var text = document.createElement("span");
+      text.textContent = tag;
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "tag-remove";
+      removeBtn.textContent = "×";
+      removeBtn.setAttribute("aria-label", "Remove tag " + tag);
+      removeBtn.addEventListener("click", function () {
+        meaningTags.splice(index, 1);
+        renderMeaningTags();
+      });
+
+      chip.appendChild(text);
+      chip.appendChild(removeBtn);
+      meaningTagContainer.insertBefore(chip, meaningInput);
+    });
+  }
+
+  function addMeaningTag(raw) {
+    var tag = raw.trim();
+    meaningInput.value = "";
+    if (!tag) return;
+    var exists = meaningTags.some(function (t) { return t.toLowerCase() === tag.toLowerCase(); });
+    if (!exists) meaningTags.push(tag);
+    renderMeaningTags();
+  }
+
+  function resetMeaningTags() {
+    meaningTags = [];
+    meaningInput.value = "";
+    renderMeaningTags();
+  }
+
+  meaningInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      addMeaningTag(meaningInput.value);
+    } else if (event.key === "Backspace" && meaningInput.value === "" && meaningTags.length) {
+      meaningTags.pop();
+      renderMeaningTags();
+    }
+  });
+
+  meaningInput.addEventListener("blur", function () {
+    if (meaningInput.value.trim()) addMeaningTag(meaningInput.value);
+  });
 
   // Pinyin -> [[hanzi, definition], ...] lookup, loaded from data/pinyin-hanzi.js.
   var PINYIN_HANZI_DATA = window.PINYIN_HANZI_DATA || {};
@@ -238,10 +329,11 @@
 
     var hanzi = hanziInput.value.trim();
     var pinyinRaw = pinyinInput.value.trim();
-    var meaning = meaningInput.value.trim();
+    if (meaningInput.value.trim()) addMeaningTag(meaningInput.value);
+    var meaning = meaningTags.slice();
 
-    if (!hanzi || !pinyinRaw || !meaning) {
-      formError.textContent = "Hanzi, pinyin, and meaning are all required.";
+    if (!hanzi || !pinyinRaw || meaning.length === 0) {
+      formError.textContent = "Hanzi, pinyin, and at least one meaning tag are all required.";
       return;
     }
 
@@ -261,6 +353,7 @@
     form.reset();
     pinyinPreview.textContent = " ";
     clearCandidates();
+    resetMeaningTags();
     hanziInput.focus();
   });
 
@@ -295,7 +388,7 @@
   document.getElementById("export-csv-btn").addEventListener("click", function () {
     var rows = [["hanzi", "pinyin", "meaning", "createdAt"]];
     entries.forEach(function (e) {
-      rows.push([e.hanzi, e.pinyin, e.meaning, e.createdAt]);
+      rows.push([e.hanzi, e.pinyin, e.meaning.join("; "), e.createdAt]);
     });
     var csv = rows.map(function (row) { return row.map(csvEscape).join(","); }).join("\n");
     download("mandarin-word-list.csv", csv, "text/csv");
@@ -345,7 +438,8 @@
   }
 
   function entryKey(e) {
-    return e.hanzi + "" + e.pinyin + "" + e.meaning;
+    var meaningKey = e.meaning.slice().sort().join("");
+    return e.hanzi + "" + e.pinyin + "" + meaningKey;
   }
 
   function mergeEntries(newOnes) {
@@ -356,8 +450,8 @@
     newOnes.forEach(function (raw) {
       var hanzi = (raw.hanzi || "").trim();
       var pinyin = (raw.pinyin || "").trim();
-      var meaning = (raw.meaning || "").trim();
-      if (!hanzi || !pinyin || !meaning) return;
+      var meaning = normalizeMeaning(raw.meaning);
+      if (!hanzi || !pinyin || meaning.length === 0) return;
 
       var candidate = { hanzi: hanzi, pinyin: pinyin, meaning: meaning };
       var key = entryKey(candidate);
@@ -400,7 +494,8 @@
             throw new Error("CSV header must include hanzi, pinyin, meaning columns.");
           }
           var objs = rows.slice(1).map(function (r) {
-            return { hanzi: r[hIdx], pinyin: r[pIdx], meaning: r[mIdx] };
+            var tags = (r[mIdx] || "").split(/\s*;\s*/).filter(Boolean);
+            return { hanzi: r[hIdx], pinyin: r[pIdx], meaning: tags };
           });
           added = mergeEntries(objs);
         }
@@ -414,6 +509,82 @@
     };
     reader.readAsText(file);
   });
+
+  // ---- internal browser storage (Origin Private File System) ----
+  //
+  // A real file, managed entirely by the browser, that autosaves with no
+  // folder picker and no permission prompt -- the "predetermined internal
+  // folder" default. It's sandboxed per-origin and isn't visible in a normal
+  // file browser; that's what makes it permission-free. Supported in Chrome
+  // and Edge when the page is served over http(s); NOT available when the
+  // page is opened directly as a file:// URL, so this silently does nothing
+  // in that case and localStorage (always active) remains the baseline.
+
+  var OPFS_SAVE_FILENAME = "mandarin-word-list.json";
+  var opfsSupported = !!(navigator.storage && typeof navigator.storage.getDirectory === "function");
+  var opfsRootPromise = null;
+  var opfsStatus = document.getElementById("opfs-status");
+
+  function getOpfsRoot() {
+    if (!opfsSupported) return Promise.resolve(null);
+    if (!opfsRootPromise) {
+      opfsRootPromise = navigator.storage.getDirectory().catch(function () { return null; });
+    }
+    return opfsRootPromise;
+  }
+
+  function writeSnapshotToOpfs() {
+    return getOpfsRoot().then(function (root) {
+      if (!root) return;
+      return root.getFileHandle(OPFS_SAVE_FILENAME, { create: true })
+        .then(function (fileHandle) { return fileHandle.createWritable(); })
+        .then(function (writable) {
+          return writable.write(JSON.stringify(entries, null, 2)).then(function () {
+            return writable.close();
+          });
+        })
+        .catch(function () { /* best-effort; localStorage is still the source of truth */ });
+    });
+  }
+
+  function readOpfsEntries() {
+    return getOpfsRoot().then(function (root) {
+      if (!root) return null;
+      return root.getFileHandle(OPFS_SAVE_FILENAME)
+        .then(function (fileHandle) { return fileHandle.getFile(); })
+        .then(function (file) { return file.text(); })
+        .then(function (text) {
+          if (!text.trim()) return [];
+          var parsed = JSON.parse(text);
+          return Array.isArray(parsed) ? parsed : [];
+        })
+        .catch(function () { return null; });
+    });
+  }
+
+  if (opfsSupported) {
+    // getDirectory() exists in Chrome/Edge even when the page can't actually
+    // use it (e.g. opened as a file:// URL, where it throws SecurityError).
+    // Only announce/rely on it once we've confirmed it really works here.
+    getOpfsRoot().then(function (root) {
+      if (!root) return;
+      opfsStatus.textContent = "+ browser-internal backup (automatic)";
+      // Merge in anything already saved to internal storage (e.g. from a
+      // previous visit before localStorage existed, or after it was
+      // cleared), then make sure internal storage has today's list too.
+      return readOpfsEntries().then(function (opfsEntries) {
+        if (opfsEntries === null) {
+          return writeSnapshotToOpfs();
+        }
+        var added = mergeEntries(opfsEntries);
+        if (added > 0) {
+          saveEntries(entries);
+          render();
+        }
+        return writeSnapshotToOpfs();
+      });
+    });
+  }
 
   // ---- local folder sync (File System Access API: Chrome, Edge) ----
 
@@ -507,9 +678,11 @@
       });
   }
 
-  // Saves to localStorage (always) and to the connected folder, if any.
+  // Saves to localStorage (always), internal browser storage (if supported),
+  // and the explicitly connected folder (if any).
   function persistEntries() {
     saveEntries(entries);
+    writeSnapshotToOpfs();
     writeSnapshotToFolder();
   }
 

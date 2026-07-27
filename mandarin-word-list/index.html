@@ -29,8 +29,10 @@
         </div>
 
         <div class="field">
-          <label for="meaning-input">Meaning</label>
-          <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
+          <label for="meaning-input">Meaning <span class="hint">(press Enter or , to add a tag)</span></label>
+          <div class="tag-input" id="meaning-tag-input">
+            <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
+          </div>
         </div>
 
         <button type="submit">Add Entry</button>
@@ -49,6 +51,7 @@
           <button type="button" id="connect-folder-btn">Connect Local Folder</button>
           <button type="button" id="disconnect-folder-btn" hidden>Disconnect</button>
           <span id="folder-status" role="status"></span>
+          <span id="opfs-status" role="status"></span>
         </div>
         <div class="toolbar-group">
           <button type="button" id="export-json-btn">Export JSON</button>
