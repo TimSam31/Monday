@@ -149,9 +149,17 @@ button:hover, .file-btn:hover { background: var(--accent-hover); }
 
 .toolbar {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
   gap: 0.6rem;
   align-items: center;
-  margin: 1rem 0;
   flex-wrap: wrap;
 }
 
@@ -165,7 +173,7 @@ button:hover, .file-btn:hover { background: var(--accent-hover); }
   color: #fff;
 }
 
-#io-status {
+#io-status, #folder-status {
   font-size: 0.85rem;
   color: var(--muted);
 }

@@ -21,6 +21,17 @@ All three fields are required per entry. Entries are saved to the browser's `loc
 
 This makes it easy to pass a list between devices or people: export on one, import on the other.
 
+## Local folder autosave
+
+`localStorage` alone only lives in one browser profile. **Connect Local Folder** goes further: pick any folder on disk and the app keeps a `mandarin-word-list.json` file in it updated automatically on every add, delete, or import — no manual export step.
+
+- **Connect Local Folder**: choose a folder. If it already has a `mandarin-word-list.json` (e.g. synced via Dropbox/a USB drive/a shared drive from another device), its entries are merged into your current list and the merged result is written back.
+- Once connected, every change autosaves to that file in the background. The status line next to the button shows the connected folder name.
+- **On reopening the app**, it remembers the last folder and offers a one-click **Reconnect** — browsers require a click (not a fully silent auto-load) to re-grant file access after a restart, for security, but you don't need to re-browse for the folder.
+- **Disconnect** stops autosaving to the folder; your entries remain in `localStorage`.
+
+This uses the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API), which **only Chrome and Edge support** (not Firefox or Safari, as of this writing). In unsupported browsers the button is disabled with an explanatory note, and the app falls back to `localStorage` + manual Export/Import — nothing else is affected.
+
 ## Data format
 
 ```json

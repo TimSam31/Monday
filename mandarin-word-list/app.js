@@ -136,7 +136,7 @@
         deleteBtn.setAttribute("aria-label", "Delete entry " + entry.hanzi);
         deleteBtn.addEventListener("click", function () {
           entries = entries.filter(function (e) { return e.id !== entry.id; });
-          saveEntries(entries);
+          persistEntries();
           render();
         });
         actionTd.appendChild(deleteBtn);
@@ -255,7 +255,7 @@
       createdAt: new Date().toISOString()
     });
 
-    saveEntries(entries);
+    persistEntries();
     render();
 
     form.reset();
@@ -404,7 +404,7 @@
           });
           added = mergeEntries(objs);
         }
-        saveEntries(entries);
+        persistEntries();
         render();
         ioStatus.textContent = "Imported " + added + " new entr" + (added === 1 ? "y" : "ies") + ".";
       } catch (err) {
@@ -414,6 +414,206 @@
     };
     reader.readAsText(file);
   });
+
+  // ---- local folder sync (File System Access API: Chrome, Edge) ----
+
+  var FOLDER_SAVE_FILENAME = "mandarin-word-list.json";
+  var FOLDER_HANDLE_DB = "mandarinWordList.folderHandle";
+  var FOLDER_HANDLE_STORE = "handles";
+  var FOLDER_HANDLE_KEY = "lastFolder";
+
+  var folderSyncSupported = typeof window.showDirectoryPicker === "function" && "indexedDB" in window;
+  var connectedDirHandle = null;
+  var pendingReconnectHandle = null;
+
+  var connectFolderBtn = document.getElementById("connect-folder-btn");
+  var disconnectFolderBtn = document.getElementById("disconnect-folder-btn");
+  var folderStatus = document.getElementById("folder-status");
+
+  function setFolderStatus(text) {
+    folderStatus.textContent = text || "";
+  }
+
+  function setConnectedUi(dirHandle) {
+    pendingReconnectHandle = null;
+    connectFolderBtn.hidden = true;
+    disconnectFolderBtn.hidden = false;
+    setFolderStatus("Connected: “" + dirHandle.name + "” (autosaving)");
+  }
+
+  function setDisconnectedUi(message) {
+    pendingReconnectHandle = null;
+    connectFolderBtn.hidden = false;
+    connectFolderBtn.textContent = "Connect Local Folder";
+    disconnectFolderBtn.hidden = true;
+    setFolderStatus(message);
+  }
+
+  // Minimal IndexedDB key-value wrapper, just to persist the directory handle
+  // itself (FileSystemDirectoryHandle objects are structured-cloneable) so the
+  // app can offer to resume the same folder on the next visit.
+  function openHandleDb() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(FOLDER_HANDLE_DB, 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore(FOLDER_HANDLE_STORE); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  function idbGet(key) {
+    return openHandleDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var req = db.transaction(FOLDER_HANDLE_STORE, "readonly").objectStore(FOLDER_HANDLE_STORE).get(key);
+        req.onsuccess = function () { resolve(req.result || null); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+
+  function idbSet(key, value) {
+    return openHandleDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(FOLDER_HANDLE_STORE, "readwrite");
+        tx.objectStore(FOLDER_HANDLE_STORE).put(value, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function idbDelete(key) {
+    return openHandleDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(FOLDER_HANDLE_STORE, "readwrite");
+        tx.objectStore(FOLDER_HANDLE_STORE).delete(key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function writeSnapshotToFolder() {
+    if (!connectedDirHandle) return Promise.resolve();
+    return connectedDirHandle.getFileHandle(FOLDER_SAVE_FILENAME, { create: true })
+      .then(function (fileHandle) { return fileHandle.createWritable(); })
+      .then(function (writable) {
+        return writable.write(JSON.stringify(entries, null, 2)).then(function () {
+          return writable.close();
+        });
+      })
+      .catch(function (err) {
+        setFolderStatus("Autosave to folder failed: " + err.message);
+      });
+  }
+
+  // Saves to localStorage (always) and to the connected folder, if any.
+  function persistEntries() {
+    saveEntries(entries);
+    writeSnapshotToFolder();
+  }
+
+  // Reads the save file from a folder. Resolves null if the folder doesn't
+  // have one yet (first time connecting this folder).
+  function readFolderEntries(dirHandle) {
+    return dirHandle.getFileHandle(FOLDER_SAVE_FILENAME)
+      .then(function (fileHandle) { return fileHandle.getFile(); })
+      .then(function (file) { return file.text(); })
+      .then(function (text) {
+        if (!text.trim()) return [];
+        var parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed : [];
+      })
+      .catch(function (err) {
+        if (err && err.name === "NotFoundError") return null;
+        throw err;
+      });
+  }
+
+  function connectToFolder(dirHandle) {
+    connectedDirHandle = dirHandle;
+    return readFolderEntries(dirHandle)
+      .then(function (folderEntries) {
+        if (folderEntries === null) {
+          return writeSnapshotToFolder().then(function () { return 0; });
+        }
+        var added = mergeEntries(folderEntries);
+        saveEntries(entries);
+        render();
+        return writeSnapshotToFolder().then(function () { return added; });
+      })
+      .then(function (added) {
+        setConnectedUi(dirHandle);
+        if (added > 0) {
+          setFolderStatus(
+            "Connected: “" + dirHandle.name + "” (autosaving) — merged " +
+            added + " entr" + (added === 1 ? "y" : "ies") + " from folder."
+          );
+        }
+      })
+      .catch(function (err) {
+        connectedDirHandle = null;
+        setDisconnectedUi("Couldn't read “" + dirHandle.name + "”: " + err.message);
+      });
+  }
+
+  if (!folderSyncSupported) {
+    connectFolderBtn.disabled = true;
+    setFolderStatus("Local folder sync needs Chrome or Edge (File System Access API).");
+  } else {
+    connectFolderBtn.addEventListener("click", function () {
+      if (pendingReconnectHandle) {
+        var handle = pendingReconnectHandle;
+        handle.requestPermission({ mode: "readwrite" }).then(function (result) {
+          if (result === "granted") {
+            connectToFolder(handle);
+          } else {
+            idbDelete(FOLDER_HANDLE_KEY).catch(function () {});
+            setDisconnectedUi("Permission denied for “" + handle.name + "”.");
+          }
+        });
+        return;
+      }
+
+      window.showDirectoryPicker({ mode: "readwrite" })
+        .then(function (dirHandle) {
+          return idbSet(FOLDER_HANDLE_KEY, dirHandle).then(function () {
+            return connectToFolder(dirHandle);
+          });
+        })
+        .catch(function (err) {
+          if (err && err.name === "AbortError") return; // user closed the picker
+          setFolderStatus("Couldn't connect: " + err.message);
+        });
+    });
+
+    disconnectFolderBtn.addEventListener("click", function () {
+      connectedDirHandle = null;
+      idbDelete(FOLDER_HANDLE_KEY).catch(function () {});
+      setDisconnectedUi("Disconnected. Entries stay saved in this browser.");
+    });
+
+    // Resume the last-connected folder automatically when possible. Browsers
+    // only let queryPermission() run without a user gesture, so a silent
+    // resume only happens if permission is still granted from this session;
+    // otherwise we surface a one-click "Reconnect" instead of the full
+    // folder picker, since requestPermission() needs a user gesture.
+    idbGet(FOLDER_HANDLE_KEY)
+      .then(function (dirHandle) {
+        if (!dirHandle) return;
+        return dirHandle.queryPermission({ mode: "readwrite" }).then(function (permission) {
+          if (permission === "granted") {
+            return connectToFolder(dirHandle);
+          }
+          pendingReconnectHandle = dirHandle;
+          connectFolderBtn.hidden = false;
+          connectFolderBtn.textContent = "Reconnect to “" + dirHandle.name + "”";
+          disconnectFolderBtn.hidden = false;
+          setFolderStatus("Click to resume autosaving to this folder.");
+        });
+      })
+      .catch(function () { /* no previous folder, or it's no longer accessible */ });
+  }
 
   render();
 })();

@@ -45,13 +45,20 @@
       </div>
 
       <div class="toolbar">
-        <button type="button" id="export-json-btn">Export JSON</button>
-        <button type="button" id="export-csv-btn">Export CSV</button>
-        <label class="file-btn">
-          Import
-          <input type="file" id="import-input" accept=".json,.csv" hidden>
-        </label>
-        <span id="io-status" role="status"></span>
+        <div class="toolbar-group" id="folder-sync-group">
+          <button type="button" id="connect-folder-btn">Connect Local Folder</button>
+          <button type="button" id="disconnect-folder-btn" hidden>Disconnect</button>
+          <span id="folder-status" role="status"></span>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" id="export-json-btn">Export JSON</button>
+          <button type="button" id="export-csv-btn">Export CSV</button>
+          <label class="file-btn">
+            Import
+            <input type="file" id="import-input" accept=".json,.csv" hidden>
+          </label>
+          <span id="io-status" role="status"></span>
+        </div>
       </div>
 
       <table id="word-table">
