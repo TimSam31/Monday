@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mandarin Word List</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Mandarin Word List</h1>
+    <p class="subtitle">Type pinyin with tone numbers, hanzi, and the meaning &mdash; build your list one entry at a time.</p>
+  </header>
+
+  <main>
+    <section class="entry-form" aria-labelledby="form-heading">
+      <h2 id="form-heading">Add an entry</h2>
+      <form id="word-form">
+        <div class="field">
+          <label for="pinyin-input">Pinyin (use tone numbers 1&ndash;4, 5 for neutral)</label>
+          <input type="text" id="pinyin-input" placeholder="e.g. ni3 hao3" autocomplete="off">
+          <div class="preview" id="pinyin-preview" aria-live="polite">&nbsp;</div>
+        </div>
+
+        <div class="field">
+          <label for="hanzi-input">Hanzi</label>
+          <input type="text" id="hanzi-input" placeholder="e.g. 你好" autocomplete="off">
+        </div>
+
+        <div class="field">
+          <label for="meaning-input">Meaning</label>
+          <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
+        </div>
+
+        <button type="submit">Add Entry</button>
+        <span id="form-error" class="error" role="alert"></span>
+      </form>
+    </section>
+
+    <section class="list-section" aria-labelledby="list-heading">
+      <div class="list-header">
+        <h2 id="list-heading">Your list (<span id="entry-count">0</span>)</h2>
+        <input type="search" id="filter-input" placeholder="Filter by hanzi, pinyin, or meaning" aria-label="Filter list">
+      </div>
+
+      <div class="toolbar">
+        <button type="button" id="export-json-btn">Export JSON</button>
+        <button type="button" id="export-csv-btn">Export CSV</button>
+        <label class="file-btn">
+          Import
+          <input type="file" id="import-input" accept=".json,.csv" hidden>
+        </label>
+        <span id="io-status" role="status"></span>
+      </div>
+
+      <table id="word-table">
+        <thead>
+          <tr>
+            <th>Hanzi</th>
+            <th>Pinyin</th>
+            <th>Meaning</th>
+            <th>Added</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="word-table-body"></tbody>
+      </table>
+      <p id="empty-state" class="empty-state">No entries yet &mdash; add your first word above.</p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
