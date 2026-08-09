@@ -43,11 +43,53 @@ section {
 
 h2 { margin-top: 0; font-size: 1.1rem; }
 
-#word-form {
+#word-form, #phrase-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   align-items: end;
+}
+
+/* The phrase field's height varies a lot (candidates panel can grow), which
+   fights align-items:end against its shorter siblings -- give it its own
+   full-width row so Pinyin/Meaning/Tags stay evenly aligned on the next. */
+#phrase-form .field:first-child {
+  grid-column: 1 / -1;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 0.2rem;
+  margin-bottom: -1px;
+  font-weight: 600;
+}
+
+.tab-btn:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.tab-btn.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tag-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 1.6rem;
 }
 
 .field { display: flex; flex-direction: column; gap: 0.35rem; }
@@ -254,6 +296,7 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 td.hanzi { font-size: 1.3rem; }
 td.pinyin { color: var(--accent); }
 td.date { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
 
 .delete-btn {
   background: transparent;
@@ -264,10 +307,249 @@ td.date { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 }
 .delete-btn:hover { color: var(--accent); background: transparent; }
 
+.edit-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4rem;
+  text-decoration: underline;
+}
+.edit-btn:hover { color: var(--accent); background: transparent; }
+
+.inline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 14rem;
+}
+
+.inline-meaning-input {
+  width: 100%;
+}
+
+.inline-edit-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.inline-edit-actions button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.secondary-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.secondary-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
 .empty-state {
   color: var(--muted);
   text-align: center;
   padding: 1rem 0 0;
+}
+
+/* ---- search section ---- */
+
+#search-input {
+  width: 100%;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.result-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) 1fr;
+  gap: 0.5rem 1rem;
+}
+
+.result-card .rc-headword {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.result-card .rc-hanzi {
+  font-size: 1.8rem;
+  line-height: 1.2;
+}
+
+.result-card .rc-pinyin {
+  color: var(--accent);
+  font-size: 1rem;
+}
+
+.result-card .rc-kind {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.result-card .rc-tags {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
+  gap: 0.25rem;
+}
+
+.result-card .rc-phrases {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.result-card .rc-phrase-hanzi {
+  font-size: 1rem;
+}
+
+.result-card .rc-phrase-pinyin {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.result-card .rc-phrase-meaning {
+  font-style: italic;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 0.1rem;
+}
+
+.result-card .rc-phrase-meaning.rc-none {
+  font-style: normal;
+}
+
+.search-show-more {
+  align-self: center;
+}
+
+.rc-view-more {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+}
+
+/* ---- per-word phrase detail view ---- */
+
+.back-btn {
+  align-self: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.detail-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.phrase-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.result-card.phrase-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.phrase-detail-item .rc-phrase-hanzi {
+  font-size: 1.2rem;
+}
+
+/* ---- phrase browse table: tags column toggle ---- */
+
+.table-toggle-row {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.tiny-btn {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+#phrase-table.tags-hidden th:nth-child(4),
+#phrase-table.tags-hidden td:nth-child(4) {
+  display: none;
+}
+
+/* ---- pagination ---- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.pagination .page-size-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pagination select {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.pagination .page-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pagination .page-nav button {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.pagination .page-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+  color: var(--muted);
+}
+
+@media (max-width: 520px) {
+  .result-card {
+    grid-template-columns: 1fr;
+  }
+  .result-card .rc-headword,
+  .result-card .rc-tags,
+  .result-card .rc-phrases {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .result-card .rc-tags {
+    justify-content: flex-start;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
