@@ -75,6 +75,18 @@ It's supported in Chrome and Edge, but **only when the page is served over http/
 
 This uses the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API), which **only Chrome and Edge support** (not Firefox or Safari, as of this writing). In unsupported browsers the button is disabled with an explanatory note, and the app falls back to `localStorage` + manual Export/Import — nothing else is affected.
 
+## Google Drive sync (works on any browser, including iPhone/Safari)
+
+**Connect Google Drive** is the option for cross-device sync when Local Folder isn't available to you — most notably on iPhone, since Safari doesn't support the File System Access API at all. It talks directly to Google's servers over plain HTTPS via the [Drive REST API](https://developers.google.com/drive/api/guides/about-sdk) using [Google Identity Services](https://developers.google.com/identity/gsi/web) for sign-in — no backend server of ours involved, so it works the same way in any browser.
+
+- **Connect Google Drive**: signs you into your Google account and grants access to just the one file this app manages, via the narrow `drive.file` scope (not your whole Drive). It searches for an existing `mandarin-word-list.json` this app previously created for that account; if found, merges it into your current list, if not, creates it.
+- Because that file lookup is scoped to your Google account and this app (not to any particular device), **a brand-new device can find and merge the same data the very first time it connects** — unlike Local Folder, there's no "first device has to already hold the file" requirement.
+- Every change autosaves to that file in the background while connected.
+- **The access token is short-lived (about an hour)** and there's no backend to silently refresh it, so it will periodically stop autosaving with a "session expired" message — click **Connect Google Drive** again (a quick Google consent screen) to resume. This is expected, not a bug: it's the trade-off for a pure client-side integration with no server holding a secret.
+- **Disconnect** revokes the token and stops autosaving there; your entries remain in `localStorage`.
+
+Setup note: this requires a Google Cloud OAuth Client ID with the Drive API enabled and this site's URL listed under "Authorized JavaScript origins" — see `app.js`'s `GOOGLE_CLIENT_ID` constant. Loading `https://accounts.google.com/gsi/client` requires an internet connection; if it fails to load (offline, blocked, etc.) the button shows a message instead of erroring, and every other feature is unaffected.
+
 ## Data format
 
 ```json

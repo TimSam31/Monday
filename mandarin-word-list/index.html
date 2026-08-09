@@ -95,6 +95,11 @@
           <span id="folder-status" role="status"></span>
           <span id="opfs-status" role="status"></span>
         </div>
+        <div class="toolbar-group" id="drive-sync-group">
+          <button type="button" id="connect-drive-btn">Connect Google Drive</button>
+          <button type="button" id="disconnect-drive-btn" hidden>Disconnect</button>
+          <span id="drive-status" role="status"></span>
+        </div>
         <div class="toolbar-group">
           <button type="button" id="export-json-btn">Export JSON (words + phrases)</button>
           <label class="file-btn">
@@ -104,6 +109,7 @@
           <span id="io-status" role="status"></span>
         </div>
       </div>
+      <p class="hint folder-sync-hint">Tip: point <strong>Connect Local Folder</strong> at a folder inside Dropbox/Google Drive/OneDrive to keep this list in sync across your devices automatically &mdash; no manual export/import needed. Only Chrome/Edge support this. <strong>Connect Google Drive</strong> works on any browser, including iPhone/Safari, but re-connects periodically since it doesn't keep you signed in silently forever.</p>
     </section>
 
     <!-- ============ BOTTOM: BROWSE SECTION ============ -->
@@ -189,6 +195,7 @@
   </main>
 
   <script src="data/pinyin-hanzi.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="app.js"></script>
 </body>
 </html>

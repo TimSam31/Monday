@@ -1771,12 +1771,14 @@
   }
 
   // Saves to localStorage (always), internal browser storage (if supported),
-  // and the explicitly connected folder (if any) -- words and phrases both.
+  // the explicitly connected folder (if any), and Google Drive (if
+  // connected) -- words and phrases both.
   function persistEntries() {
     saveEntries(entries);
     savePhrases(phrases);
     writeSnapshotToOpfs();
     writeSnapshotToFolder();
+    writeDriveFile();
   }
 
   // Reads the save file from a folder. Resolves null if the folder doesn't
@@ -1879,6 +1881,194 @@
       })
       .catch(function () { /* no previous folder, or it's no longer accessible */ });
   }
+
+  // ---- Google Drive sync (Google Identity Services + Drive REST API) ----
+  //
+  // Unlike Local Folder (Chrome/Edge only, needs an OS-level sync client
+  // already holding the file) or OPFS (invisible, per-browser), this talks
+  // straight to Google's servers over plain HTTPS -- it works in any
+  // browser, including Safari/iOS, and a second device can pick up the
+  // same file the very first time it connects, no prior device required.
+  // Trade-off: the access token this grants is short-lived (~1 hour) and,
+  // with no backend to hold a client secret, can't be silently refreshed --
+  // reconnecting periodically (a click + Google's consent screen) is
+  // expected, not a bug.
+
+  var GOOGLE_CLIENT_ID = "40984349574-0q0oiaq9tf2rrr9jss6kqb94ualglbgj.apps.googleusercontent.com";
+  var DRIVE_FILE_NAME = "mandarin-word-list.json";
+  var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+  var driveAccessToken = null;
+  var driveFileId = null;
+  var driveTokenClient = null;
+
+  var connectDriveBtn = document.getElementById("connect-drive-btn");
+  var disconnectDriveBtn = document.getElementById("disconnect-drive-btn");
+  var driveStatus = document.getElementById("drive-status");
+
+  function setDriveStatus(text) {
+    driveStatus.textContent = text || "";
+  }
+
+  function setDriveConnectedUi(message) {
+    connectDriveBtn.hidden = true;
+    disconnectDriveBtn.hidden = false;
+    setDriveStatus(message);
+  }
+
+  function setDriveDisconnectedUi(message) {
+    connectDriveBtn.hidden = false;
+    connectDriveBtn.textContent = "Connect Google Drive";
+    disconnectDriveBtn.hidden = true;
+    setDriveStatus(message);
+  }
+
+  // Wraps fetch() with the bearer token and treats an expired/revoked token
+  // as a disconnect -- there's no refresh-token flow available client-side,
+  // so the recovery is just "click Connect again."
+  function driveApiFetch(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    options.headers["Authorization"] = "Bearer " + driveAccessToken;
+    return fetch(url, options).then(function (res) {
+      if (res.status === 401) {
+        driveAccessToken = null;
+        driveFileId = null;
+        setDriveDisconnectedUi("Google Drive session expired — click Connect to resume.");
+        throw new Error("Drive session expired");
+      }
+      if (!res.ok) {
+        throw new Error("Drive API error (" + res.status + ")");
+      }
+      return res;
+    });
+  }
+
+  // drive.file scope only ever surfaces files this app created (or the user
+  // explicitly opened with it via a picker, which this app doesn't use), so
+  // a plain name search here reliably finds a file this same app created on
+  // any device, for this Google account -- that's what makes a fresh device
+  // able to find existing data with no prior setup.
+  function findDriveFile() {
+    var q = encodeURIComponent("name='" + DRIVE_FILE_NAME + "' and trashed=false");
+    return driveApiFetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id,modifiedTime)&spaces=drive")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var files = data.files || [];
+        if (!files.length) return null;
+        files.sort(function (a, b) { return new Date(b.modifiedTime) - new Date(a.modifiedTime); });
+        return files[0].id;
+      });
+  }
+
+  function readDriveFile(fileId) {
+    return driveApiFetch("https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media")
+      .then(function (res) { return res.text(); })
+      .then(parseSnapshotPayload);
+  }
+
+  function createDriveFile() {
+    var boundary = "monday-" + makeId();
+    var body =
+      "--" + boundary + "\r\n" +
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+      JSON.stringify({ name: DRIVE_FILE_NAME, mimeType: "application/json" }) + "\r\n" +
+      "--" + boundary + "\r\n" +
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+      snapshotPayload() + "\r\n" +
+      "--" + boundary + "--";
+
+    return driveApiFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+      method: "POST",
+      headers: { "Content-Type": "multipart/related; boundary=" + boundary },
+      body: body
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { return data.id; });
+  }
+
+  function writeDriveFile() {
+    if (!driveAccessToken || !driveFileId) return Promise.resolve();
+    return driveApiFetch("https://www.googleapis.com/upload/drive/v3/files/" + driveFileId + "?uploadType=media", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: snapshotPayload()
+    }).catch(function (err) {
+      // A 401 already cleared driveAccessToken and set its own clearer
+      // "session expired" message via setDriveDisconnectedUi -- don't
+      // stomp on that with a generic failure message here.
+      if (driveAccessToken) {
+        setDriveStatus("Drive autosave failed: " + err.message);
+      }
+    });
+  }
+
+  function connectToDrive() {
+    return findDriveFile()
+      .then(function (fileId) {
+        if (fileId) {
+          driveFileId = fileId;
+          return readDriveFile(fileId).then(function (data) {
+            if (!data) return { words: 0, phrases: 0 };
+            var addedWords = mergeEntries(data.words);
+            var addedPhrases = mergePhrases(data.phrases);
+            saveEntries(entries);
+            savePhrases(phrases);
+            renderAll();
+            return writeDriveFile().then(function () { return { words: addedWords, phrases: addedPhrases }; });
+          });
+        }
+        return createDriveFile().then(function (newFileId) {
+          driveFileId = newFileId;
+          return { words: 0, phrases: 0 };
+        });
+      })
+      .then(function (added) {
+        var msg = "Connected to Google Drive (autosaving)";
+        if (added.words > 0 || added.phrases > 0) {
+          msg +=
+            " — merged " + added.words + " word" + (added.words === 1 ? "" : "s") +
+            " and " + added.phrases + " phrase" + (added.phrases === 1 ? "" : "s") + " from Drive.";
+        }
+        setDriveConnectedUi(msg);
+      })
+      .catch(function (err) {
+        driveAccessToken = null;
+        driveFileId = null;
+        setDriveDisconnectedUi("Couldn't connect to Drive: " + err.message);
+      });
+  }
+
+  connectDriveBtn.addEventListener("click", function () {
+    if (typeof google === "undefined" || !google.accounts || !google.accounts.oauth2) {
+      setDriveStatus("Google sign-in hasn't loaded (check your connection) — try again in a moment.");
+      return;
+    }
+    if (!driveTokenClient) {
+      driveTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: DRIVE_SCOPE,
+        callback: function (response) {
+          if (response.error) {
+            setDriveDisconnectedUi("Google sign-in failed: " + response.error);
+            return;
+          }
+          driveAccessToken = response.access_token;
+          connectToDrive();
+        }
+      });
+    }
+    driveTokenClient.requestAccessToken();
+  });
+
+  disconnectDriveBtn.addEventListener("click", function () {
+    if (driveAccessToken && typeof google !== "undefined" && google.accounts && google.accounts.oauth2) {
+      google.accounts.oauth2.revoke(driveAccessToken, function () {});
+    }
+    driveAccessToken = null;
+    driveFileId = null;
+    setDriveDisconnectedUi("Disconnected. Entries stay saved in this browser.");
+  });
 
   renderAll();
 })();
