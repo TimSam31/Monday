@@ -78,6 +78,15 @@
     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   }
 
+  // Splits a candidate's English definition (e.g. "good, excellent, fine;
+  // proper, suitable; well") into individual tag-sized fragments.
+  function splitDefinitionIntoTags(definition) {
+    return (definition || "")
+      .split(/[,;]/)
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
   function makeId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -711,6 +720,9 @@
         // commit the syllable (numeral -> diacritic) and start the next one
         pinyinInput.value = pinyinInput.value.replace(/\S+$/, converted) + " ";
         pinyinPreview.textContent = convertPinyin(pinyinInput.value) || " ";
+        // Pre-fill meaning tags from the candidate's dictionary definition;
+        // the user can still remove any of them before saving the word.
+        splitDefinitionIntoTags(definition).forEach(addMeaningTag);
         clearCandidates();
         pinyinInput.focus();
       });
