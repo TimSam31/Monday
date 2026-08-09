@@ -411,6 +411,167 @@
   var wordPagination = document.getElementById("word-pagination");
   var wordPageState = { page: 1, pageSize: 20 };
 
+  // ---- inline editing (word tags / phrase meaning) ----
+  //
+  // A word or phrase can be "opened" for editing from either the browse
+  // table or a search result card -- both read the same editingWordId /
+  // editingPhraseId, so there's only ever one item of each type being
+  // edited at a time, wherever it's rendered.
+
+  var editingWordId = null;
+  var editingPhraseId = null;
+
+  function buildEditTrigger(onClick, ariaLabel) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "edit-btn";
+    btn.textContent = "Edit";
+    if (ariaLabel) btn.setAttribute("aria-label", ariaLabel);
+    btn.addEventListener("click", onClick);
+    return btn;
+  }
+
+  // Editable tag-chip control for a word's meaning tags, reused by the
+  // Words browse table and word search-result cards. Edits a working copy
+  // until Save, so Cancel discards cleanly.
+  function buildWordTagsEditor(word) {
+    var wrapper = document.createElement("div");
+    wrapper.className = "inline-editor";
+
+    var tagBox = document.createElement("div");
+    tagBox.className = "tag-input";
+
+    var workingTags = word.meaning.slice();
+    var input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "add tag";
+
+    function renderChips() {
+      Array.prototype.slice.call(tagBox.querySelectorAll(".tag-chip")).forEach(function (el) { el.remove(); });
+      workingTags.forEach(function (tag, index) {
+        var chip = document.createElement("span");
+        chip.className = "tag-chip";
+        var text = document.createElement("span");
+        text.textContent = tag;
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "tag-remove";
+        removeBtn.textContent = "×";
+        removeBtn.setAttribute("aria-label", "Remove tag " + tag);
+        removeBtn.addEventListener("click", function () {
+          workingTags.splice(index, 1);
+          renderChips();
+        });
+        chip.appendChild(text);
+        chip.appendChild(removeBtn);
+        tagBox.insertBefore(chip, input);
+      });
+    }
+
+    function commitTypedTag() {
+      var tag = input.value.trim();
+      input.value = "";
+      if (!tag) return;
+      var exists = workingTags.some(function (t) { return t.toLowerCase() === tag.toLowerCase(); });
+      if (!exists) workingTags.push(tag);
+      renderChips();
+    }
+
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === ",") {
+        event.preventDefault();
+        commitTypedTag();
+      } else if (event.key === "Backspace" && input.value === "" && workingTags.length) {
+        workingTags.pop();
+        renderChips();
+      }
+    });
+
+    tagBox.appendChild(input);
+    renderChips();
+
+    var error = document.createElement("span");
+    error.className = "error";
+
+    var actions = document.createElement("div");
+    actions.className = "inline-edit-actions";
+
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", function () {
+      commitTypedTag();
+      if (workingTags.length === 0) {
+        error.textContent = "At least one tag is required.";
+        return;
+      }
+      word.meaning = workingTags;
+      editingWordId = null;
+      persistEntries();
+      renderAll();
+    });
+
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "secondary-btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", function () {
+      editingWordId = null;
+      renderAll();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    wrapper.appendChild(tagBox);
+    wrapper.appendChild(actions);
+    wrapper.appendChild(error);
+    return wrapper;
+  }
+
+  // Editable plain-text control for a phrase's meaning, reused by the
+  // Phrases browse table and phrase search-result cards. Tags are never
+  // editable here since they're always derived from the word list.
+  function buildPhraseMeaningEditor(phrase) {
+    var wrapper = document.createElement("div");
+    wrapper.className = "inline-editor";
+
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "inline-meaning-input";
+    input.value = phrase.meaning;
+    input.placeholder = "meaning";
+
+    var actions = document.createElement("div");
+    actions.className = "inline-edit-actions";
+
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", function () {
+      phrase.meaning = input.value.trim();
+      editingPhraseId = null;
+      persistEntries();
+      renderAll();
+    });
+
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "secondary-btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", function () {
+      editingPhraseId = null;
+      renderAll();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(actions);
+    return wrapper;
+  }
+
   function renderWordTable() {
     var query = wordFilterInput.value.trim().toLowerCase();
     var queryPlain = stripDiacritics(query);
@@ -440,29 +601,41 @@
 
       var meaningTd = document.createElement("td");
       meaningTd.className = "meaning-cell";
-      entry.meaning.forEach(function (tag) {
-        var pill = document.createElement("span");
-        pill.className = "meaning-pill";
-        pill.textContent = tag;
-        meaningTd.appendChild(pill);
-      });
+      var isEditingWord = editingWordId === entry.id;
+      if (isEditingWord) {
+        meaningTd.appendChild(buildWordTagsEditor(entry));
+      } else {
+        entry.meaning.forEach(function (tag) {
+          var pill = document.createElement("span");
+          pill.className = "meaning-pill";
+          pill.textContent = tag;
+          meaningTd.appendChild(pill);
+        });
+      }
 
       var dateTd = document.createElement("td");
       dateTd.className = "date";
       dateTd.textContent = formatDate(entry.createdAt);
 
       var actionTd = document.createElement("td");
-      var deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "delete-btn";
-      deleteBtn.textContent = "×";
-      deleteBtn.setAttribute("aria-label", "Delete entry " + entry.hanzi);
-      deleteBtn.addEventListener("click", function () {
-        entries = entries.filter(function (e) { return e.id !== entry.id; });
-        persistEntries();
-        renderAll();
-      });
-      actionTd.appendChild(deleteBtn);
+      if (!isEditingWord) {
+        actionTd.appendChild(buildEditTrigger(function () {
+          editingWordId = entry.id;
+          renderAll();
+        }, "Edit tags for " + entry.hanzi));
+
+        var deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.textContent = "×";
+        deleteBtn.setAttribute("aria-label", "Delete entry " + entry.hanzi);
+        deleteBtn.addEventListener("click", function () {
+          entries = entries.filter(function (e) { return e.id !== entry.id; });
+          persistEntries();
+          renderAll();
+        });
+        actionTd.appendChild(deleteBtn);
+      }
 
       tr.appendChild(hanziTd);
       tr.appendChild(pinyinTd);
@@ -521,9 +694,14 @@
       pinyinTd.className = "pinyin";
       pinyinTd.textContent = phrase.pinyin;
 
+      var isEditingPhrase = editingPhraseId === phrase.id;
       var meaningTd = document.createElement("td");
-      meaningTd.className = "phrase-meaning-cell";
-      meaningTd.textContent = phrase.meaning;
+      if (isEditingPhrase) {
+        meaningTd.appendChild(buildPhraseMeaningEditor(phrase));
+      } else {
+        meaningTd.className = "phrase-meaning-cell";
+        meaningTd.textContent = phrase.meaning;
+      }
 
       var tagsTd = document.createElement("td");
       tagsTd.className = "meaning-cell";
@@ -539,17 +717,24 @@
       dateTd.textContent = formatDate(phrase.createdAt);
 
       var actionTd = document.createElement("td");
-      var deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "delete-btn";
-      deleteBtn.textContent = "×";
-      deleteBtn.setAttribute("aria-label", "Delete phrase " + phrase.hanzi);
-      deleteBtn.addEventListener("click", function () {
-        phrases = phrases.filter(function (p) { return p.id !== phrase.id; });
-        persistEntries();
-        renderAll();
-      });
-      actionTd.appendChild(deleteBtn);
+      if (!isEditingPhrase) {
+        actionTd.appendChild(buildEditTrigger(function () {
+          editingPhraseId = phrase.id;
+          renderAll();
+        }, "Edit meaning for " + phrase.hanzi));
+
+        var deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.textContent = "×";
+        deleteBtn.setAttribute("aria-label", "Delete phrase " + phrase.hanzi);
+        deleteBtn.addEventListener("click", function () {
+          phrases = phrases.filter(function (p) { return p.id !== phrase.id; });
+          persistEntries();
+          renderAll();
+        });
+        actionTd.appendChild(deleteBtn);
+      }
 
       tr.appendChild(hanziTd);
       tr.appendChild(pinyinTd);
@@ -999,7 +1184,21 @@
     }
 
     card.appendChild(buildHeadword("Word", word.hanzi, word.pinyin));
-    card.appendChild(buildTagsRow(word.meaning));
+
+    if (editingWordId === word.id) {
+      var editingTagsEl = document.createElement("div");
+      editingTagsEl.className = "rc-tags";
+      editingTagsEl.appendChild(buildWordTagsEditor(word));
+      card.appendChild(editingTagsEl);
+    } else {
+      var tagsEl = buildTagsRow(word.meaning);
+      tagsEl.appendChild(buildEditTrigger(function () {
+        editingWordId = word.id;
+        renderAll();
+      }, "Edit tags for " + word.hanzi));
+      card.appendChild(tagsEl);
+    }
+
     card.appendChild(phrasesEl);
     return card;
   }
@@ -1012,10 +1211,18 @@
 
     var phrasesEl = document.createElement("div");
     phrasesEl.className = "rc-phrases";
-    var meaningLine = document.createElement("div");
-    meaningLine.className = "rc-phrase-meaning";
-    meaningLine.textContent = phrase.meaning || "(no meaning yet)";
-    phrasesEl.appendChild(meaningLine);
+    if (editingPhraseId === phrase.id) {
+      phrasesEl.appendChild(buildPhraseMeaningEditor(phrase));
+    } else {
+      var meaningLine = document.createElement("div");
+      meaningLine.className = "rc-phrase-meaning";
+      meaningLine.textContent = phrase.meaning || "(no meaning yet)";
+      phrasesEl.appendChild(meaningLine);
+      phrasesEl.appendChild(buildEditTrigger(function () {
+        editingPhraseId = phrase.id;
+        renderAll();
+      }, "Edit meaning for " + phrase.hanzi));
+    }
 
     card.appendChild(buildHeadword("Phrase", phrase.hanzi, phrase.pinyin));
     card.appendChild(buildTagsRow(info.tags));

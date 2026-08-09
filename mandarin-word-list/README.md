@@ -42,6 +42,10 @@ One search box, matching only your own saved data (never the bundled candidate r
 
 Each match renders as a card: hanzi and pinyin large on the left, tags top-right. A word card also shows its top 2 related example phrases (ranked by how much the rest of that phrase's vocabulary echoes the word's own tags, tie-broken by most recent), each with its meaning in italic underneath. Results are capped inline; a "Show N more results" button expands the full list with the same pagination controls used for browsing.
 
+## Editing an entry
+
+An **Edit** link sits next to a word's tags or a phrase's meaning, both in the vocabulary table and on search result cards — clicking it turns that spot into the same removable-tag-chip editor used when adding a word (for a word) or a plain text box (for a phrase's meaning), with **Save**/**Cancel**. A word needs at least one tag to save. Hanzi and pinyin aren't editable this way (re-typing those is closer to just adding a new entry and deleting the old one); a phrase's tags never are, since they're always derived from the current word list. Only one entry is ever mid-edit at a time — opening the editor for the same word from the table and from a search card shows the identical in-progress edit in both places, since it's the same state either way.
+
 ## Browsing your vocabulary
 
 Words and Phrases each get their own tab, a quick text filter, and pagination (20/50/100/200 per page).
