@@ -2,6 +2,8 @@
   "use strict";
 
   var STORAGE_KEY = "mandarinWordList.entries";
+  var PHRASES_STORAGE_KEY = "mandarinWordList.phrases";
+  var CJK_RE = /[一-鿿]/;
 
   var TONE_MARKS = {
     a: ["a", "ā", "á", "ǎ", "à"],
@@ -66,7 +68,85 @@
       .join(" ");
   }
 
-  // ---- storage ----
+  function containsCjk(text) {
+    return CJK_RE.test(text || "");
+  }
+
+  // Strips tone marks (and ü's umlaut) so pinyin search/filter can match
+  // plain-typed queries like "hao" against stored diacritic pinyin "hǎo".
+  function stripDiacritics(text) {
+    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function makeId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function formatDate(iso) {
+    var d = new Date(iso);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function csvEscape(value) {
+    var str = String(value == null ? "" : value);
+    if (/[",\n]/.test(str)) {
+      str = '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
+  function parseCsv(text) {
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"' && text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else if (c === '"') {
+          inQuotes = false;
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ",") {
+        row.push(field);
+        field = "";
+      } else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = "";
+      } else {
+        field += c;
+      }
+    }
+    if (field.length || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows.filter(function (r) { return r.length > 1 || r[0] !== ""; });
+  }
+
+  function download(filename, content, mime) {
+    var blob = new Blob([content], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ---- words storage ----
 
   // Meaning is stored as an array of tags. Accepts a legacy single-string
   // meaning (from data saved before tags existed) and wraps it as one tag.
@@ -106,84 +186,413 @@
 
   var entries = loadEntries();
 
-  // ---- rendering ----
+  // ---- phrases storage ----
 
-  var tableBody = document.getElementById("word-table-body");
-  var emptyState = document.getElementById("empty-state");
-  var entryCount = document.getElementById("entry-count");
-  var filterInput = document.getElementById("filter-input");
-
-  function formatDate(iso) {
-    var d = new Date(iso);
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  // Phrase meaning is a single plain string (Latin alphabet), display-only.
+  // Tags are never stored -- they're derived from the current word list
+  // every time a phrase is rendered, so editing/deleting a word instantly
+  // updates every phrase's tags with nothing to keep in sync.
+  function normalizePhrase(p) {
+    return {
+      id: p.id || makeId(),
+      hanzi: p.hanzi,
+      pinyin: p.pinyin || "",
+      meaning: typeof p.meaning === "string" ? p.meaning.trim() : "",
+      createdAt: p.createdAt || new Date().toISOString()
+    };
   }
 
-  function render() {
-    var query = filterInput.value.trim().toLowerCase();
-    var visible = entries.filter(function (e) {
+  function loadPhrases() {
+    try {
+      var raw = localStorage.getItem(PHRASES_STORAGE_KEY);
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map(normalizePhrase) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function savePhrases(phrases) {
+    localStorage.setItem(PHRASES_STORAGE_KEY, JSON.stringify(phrases));
+  }
+
+  var phrases = loadPhrases();
+
+  // ---- pinyin candidate data + reverse lookup ----
+
+  // Pinyin -> [[hanzi, definition], ...] lookup, loaded from data/pinyin-hanzi.js.
+  var PINYIN_HANZI_DATA = window.PINYIN_HANZI_DATA || {};
+
+  // hanzi -> a single best-guess pinyin reading, inverted from the above.
+  // Used only as a last-resort fallback when auto-filling pinyin for a
+  // pasted phrase; a saved word's own pinyin is always preferred when a
+  // character run matches one.
+  var HANZI_TO_PINYIN = (function () {
+    var map = {};
+    Object.keys(PINYIN_HANZI_DATA).forEach(function (py) {
+      PINYIN_HANZI_DATA[py].forEach(function (pair) {
+        var ch = pair[0];
+        if (!(ch in map)) map[ch] = py;
+      });
+    });
+    return map;
+  })();
+
+  // ---- word/phrase matching + derived tags ----
+
+  function matchWordsInPhrase(phraseHanzi, wordList) {
+    if (!phraseHanzi) return [];
+    return wordList.filter(function (w) {
+      return w.hanzi && phraseHanzi.indexOf(w.hanzi) !== -1;
+    });
+  }
+
+  function derivePhraseTags(phraseHanzi, wordList) {
+    var matched = matchWordsInPhrase(phraseHanzi, wordList);
+    var seen = {};
+    var tags = [];
+    matched.forEach(function (w) {
+      w.meaning.forEach(function (t) {
+        var key = t.toLowerCase();
+        if (!seen[key]) {
+          seen[key] = true;
+          tags.push(t);
+        }
+      });
+    });
+    return { matchedWords: matched, tags: tags };
+  }
+
+  // Ranks phrases containing `word` by how much the *rest* of the phrase's
+  // vocabulary echoes that word's own tags (a rough relevance signal),
+  // tie-broken by most recently added.
+  function topPhrasesForWord(word, phraseList, wordList, limit) {
+    var scored = [];
+    phraseList.forEach(function (p) {
+      var info = derivePhraseTags(p.hanzi, wordList);
+      var containsWord = info.matchedWords.some(function (w) { return w.id === word.id; });
+      if (!containsWord) return;
+
+      var otherTags = {};
+      info.matchedWords.forEach(function (w) {
+        if (w.id === word.id) return;
+        w.meaning.forEach(function (t) { otherTags[t.toLowerCase()] = true; });
+      });
+      var score = word.meaning.reduce(function (acc, t) {
+        return acc + (otherTags[t.toLowerCase()] ? 1 : 0);
+      }, 0);
+
+      scored.push({ phrase: p, score: score, tags: info.tags });
+    });
+
+    scored.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return new Date(b.phrase.createdAt) - new Date(a.phrase.createdAt);
+    });
+
+    return scored.slice(0, limit || 2);
+  }
+
+  // Best-effort pinyin for a hanzi string with no pinyin of its own: scan
+  // left to right, preferring the longest run that matches a saved word's
+  // exact hanzi (so we reuse its known-correct pinyin), falling back to the
+  // single most common reading per character for anything else.
+  function autoFillPinyinForHanzi(hanziText, wordList) {
+    var chars = Array.from(hanziText);
+    var byLength = wordList
+      .filter(function (w) { return w.hanzi; })
+      .slice()
+      .sort(function (a, b) { return Array.from(b.hanzi).length - Array.from(a.hanzi).length; });
+    var maxWordLen = byLength.length ? Array.from(byLength[0].hanzi).length : 0;
+
+    var result = [];
+    var i = 0;
+    while (i < chars.length) {
+      var matchedWord = null;
+      for (var len = Math.min(maxWordLen, chars.length - i); len >= 1; len--) {
+        var candidate = chars.slice(i, i + len).join("");
+        var found = byLength.find(function (w) { return w.hanzi === candidate; });
+        if (found) { matchedWord = found; break; }
+      }
+      if (matchedWord) {
+        result.push(matchedWord.pinyin);
+        i += Array.from(matchedWord.hanzi).length;
+      } else {
+        result.push(HANZI_TO_PINYIN[chars[i]] || "?");
+        i += 1;
+      }
+    }
+    return result.join(" ");
+  }
+
+  // ---- shared pagination ----
+
+  var PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
+
+  function clampPage(page, pageCount) {
+    return Math.min(Math.max(1, page), Math.max(1, pageCount));
+  }
+
+  function paginate(items, state) {
+    var start = (state.page - 1) * state.pageSize;
+    return items.slice(start, start + state.pageSize);
+  }
+
+  function renderPaginationControls(container, state, totalItems, onChange) {
+    container.innerHTML = "";
+    var pageCount = Math.max(1, Math.ceil(totalItems / state.pageSize));
+    state.page = clampPage(state.page, pageCount);
+
+    var sizeGroup = document.createElement("div");
+    sizeGroup.className = "page-size-group";
+    var label = document.createElement("label");
+    label.textContent = "Show";
+    var select = document.createElement("select");
+    select.setAttribute("aria-label", "Items per page");
+    PAGE_SIZE_OPTIONS.forEach(function (size) {
+      var opt = document.createElement("option");
+      opt.value = String(size);
+      opt.textContent = String(size);
+      if (size === state.pageSize) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", function () {
+      state.pageSize = parseInt(select.value, 10);
+      state.page = 1;
+      onChange();
+    });
+    sizeGroup.appendChild(label);
+    sizeGroup.appendChild(select);
+
+    var nav = document.createElement("div");
+    nav.className = "page-nav";
+
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.textContent = "Prev";
+    prevBtn.disabled = state.page <= 1;
+    prevBtn.addEventListener("click", function () { state.page -= 1; onChange(); });
+
+    var indicator = document.createElement("span");
+    indicator.textContent = "Page " + state.page + " of " + pageCount;
+
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.textContent = "Next";
+    nextBtn.disabled = state.page >= pageCount;
+    nextBtn.addEventListener("click", function () { state.page += 1; onChange(); });
+
+    nav.appendChild(prevBtn);
+    nav.appendChild(indicator);
+    nav.appendChild(nextBtn);
+
+    if (totalItems > 0) {
+      container.appendChild(sizeGroup);
+      container.appendChild(nav);
+    }
+  }
+
+  // ---- word browse table ----
+
+  var wordTable = document.getElementById("word-table");
+  var wordTableBody = document.getElementById("word-table-body");
+  var wordEmptyState = document.getElementById("word-empty-state");
+  var wordCountLabel = document.getElementById("word-count-label");
+  var wordFilterInput = document.getElementById("word-filter-input");
+  var wordPagination = document.getElementById("word-pagination");
+  var wordPageState = { page: 1, pageSize: 20 };
+
+  function renderWordTable() {
+    var query = wordFilterInput.value.trim().toLowerCase();
+    var queryPlain = stripDiacritics(query);
+    var filtered = entries.filter(function (e) {
       if (!query) return true;
       return (
         e.hanzi.toLowerCase().indexOf(query) !== -1 ||
-        e.pinyin.toLowerCase().indexOf(query) !== -1 ||
+        stripDiacritics(e.pinyin.toLowerCase()).indexOf(queryPlain) !== -1 ||
         e.meaning.some(function (tag) { return tag.toLowerCase().indexOf(query) !== -1; })
       );
     });
 
-    tableBody.innerHTML = "";
-    visible
-      .slice()
-      .reverse()
-      .forEach(function (entry) {
-        var tr = document.createElement("tr");
+    var sorted = filtered.slice().reverse();
+    var pageItems = paginate(sorted, wordPageState);
 
-        var hanziTd = document.createElement("td");
-        hanziTd.className = "hanzi";
-        hanziTd.textContent = entry.hanzi;
+    wordTableBody.innerHTML = "";
+    pageItems.forEach(function (entry) {
+      var tr = document.createElement("tr");
 
-        var pinyinTd = document.createElement("td");
-        pinyinTd.className = "pinyin";
-        pinyinTd.textContent = entry.pinyin;
+      var hanziTd = document.createElement("td");
+      hanziTd.className = "hanzi";
+      hanziTd.textContent = entry.hanzi;
 
-        var meaningTd = document.createElement("td");
-        meaningTd.className = "meaning-cell";
-        entry.meaning.forEach(function (tag) {
-          var pill = document.createElement("span");
-          pill.className = "meaning-pill";
-          pill.textContent = tag;
-          meaningTd.appendChild(pill);
-        });
+      var pinyinTd = document.createElement("td");
+      pinyinTd.className = "pinyin";
+      pinyinTd.textContent = entry.pinyin;
 
-        var dateTd = document.createElement("td");
-        dateTd.className = "date";
-        dateTd.textContent = formatDate(entry.createdAt);
-
-        var actionTd = document.createElement("td");
-        var deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.className = "delete-btn";
-        deleteBtn.textContent = "×";
-        deleteBtn.setAttribute("aria-label", "Delete entry " + entry.hanzi);
-        deleteBtn.addEventListener("click", function () {
-          entries = entries.filter(function (e) { return e.id !== entry.id; });
-          persistEntries();
-          render();
-        });
-        actionTd.appendChild(deleteBtn);
-
-        tr.appendChild(hanziTd);
-        tr.appendChild(pinyinTd);
-        tr.appendChild(meaningTd);
-        tr.appendChild(dateTd);
-        tr.appendChild(actionTd);
-        tableBody.appendChild(tr);
+      var meaningTd = document.createElement("td");
+      meaningTd.className = "meaning-cell";
+      entry.meaning.forEach(function (tag) {
+        var pill = document.createElement("span");
+        pill.className = "meaning-pill";
+        pill.textContent = tag;
+        meaningTd.appendChild(pill);
       });
 
-    entryCount.textContent = entries.length;
-    emptyState.style.display = entries.length === 0 ? "block" : "none";
-    document.getElementById("word-table").style.display = entries.length === 0 ? "none" : "table";
+      var dateTd = document.createElement("td");
+      dateTd.className = "date";
+      dateTd.textContent = formatDate(entry.createdAt);
+
+      var actionTd = document.createElement("td");
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "delete-btn";
+      deleteBtn.textContent = "×";
+      deleteBtn.setAttribute("aria-label", "Delete entry " + entry.hanzi);
+      deleteBtn.addEventListener("click", function () {
+        entries = entries.filter(function (e) { return e.id !== entry.id; });
+        persistEntries();
+        renderAll();
+      });
+      actionTd.appendChild(deleteBtn);
+
+      tr.appendChild(hanziTd);
+      tr.appendChild(pinyinTd);
+      tr.appendChild(meaningTd);
+      tr.appendChild(dateTd);
+      tr.appendChild(actionTd);
+      wordTableBody.appendChild(tr);
+    });
+
+    wordCountLabel.textContent = entries.length + (entries.length === 1 ? " word" : " words");
+    wordEmptyState.style.display = entries.length === 0 ? "block" : "none";
+    wordTable.style.display = entries.length === 0 ? "none" : "table";
+    renderPaginationControls(wordPagination, wordPageState, filtered.length, renderWordTable);
   }
 
-  // ---- add entry form ----
+  wordFilterInput.addEventListener("input", function () {
+    wordPageState.page = 1;
+    renderWordTable();
+  });
+
+  // ---- phrase browse table ----
+
+  var phraseTable = document.getElementById("phrase-table");
+  var phraseTableBody = document.getElementById("phrase-table-body");
+  var phraseEmptyState = document.getElementById("phrase-empty-state");
+  var phraseCountLabel = document.getElementById("phrase-count-label");
+  var phraseFilterInput = document.getElementById("phrase-filter-input");
+  var phrasePagination = document.getElementById("phrase-pagination");
+  var phrasePageState = { page: 1, pageSize: 20 };
+
+  function renderPhraseTable() {
+    var query = phraseFilterInput.value.trim().toLowerCase();
+    var filtered = phrases.filter(function (p) {
+      if (!query) return true;
+      var info = derivePhraseTags(p.hanzi, entries);
+      return (
+        p.hanzi.toLowerCase().indexOf(query) !== -1 ||
+        (p.meaning || "").toLowerCase().indexOf(query) !== -1 ||
+        info.tags.some(function (t) { return t.toLowerCase().indexOf(query) !== -1; })
+      );
+    });
+
+    var sorted = filtered.slice().reverse();
+    var pageItems = paginate(sorted, phrasePageState);
+
+    phraseTableBody.innerHTML = "";
+    pageItems.forEach(function (phrase) {
+      var info = derivePhraseTags(phrase.hanzi, entries);
+      var tr = document.createElement("tr");
+
+      var hanziTd = document.createElement("td");
+      hanziTd.className = "hanzi";
+      hanziTd.textContent = phrase.hanzi;
+
+      var pinyinTd = document.createElement("td");
+      pinyinTd.className = "pinyin";
+      pinyinTd.textContent = phrase.pinyin;
+
+      var meaningTd = document.createElement("td");
+      meaningTd.className = "phrase-meaning-cell";
+      meaningTd.textContent = phrase.meaning;
+
+      var tagsTd = document.createElement("td");
+      tagsTd.className = "meaning-cell";
+      info.tags.forEach(function (tag) {
+        var pill = document.createElement("span");
+        pill.className = "meaning-pill";
+        pill.textContent = tag;
+        tagsTd.appendChild(pill);
+      });
+
+      var dateTd = document.createElement("td");
+      dateTd.className = "date";
+      dateTd.textContent = formatDate(phrase.createdAt);
+
+      var actionTd = document.createElement("td");
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "delete-btn";
+      deleteBtn.textContent = "×";
+      deleteBtn.setAttribute("aria-label", "Delete phrase " + phrase.hanzi);
+      deleteBtn.addEventListener("click", function () {
+        phrases = phrases.filter(function (p) { return p.id !== phrase.id; });
+        persistEntries();
+        renderAll();
+      });
+      actionTd.appendChild(deleteBtn);
+
+      tr.appendChild(hanziTd);
+      tr.appendChild(pinyinTd);
+      tr.appendChild(meaningTd);
+      tr.appendChild(tagsTd);
+      tr.appendChild(dateTd);
+      tr.appendChild(actionTd);
+      phraseTableBody.appendChild(tr);
+    });
+
+    phraseCountLabel.textContent = phrases.length + (phrases.length === 1 ? " phrase" : " phrases");
+    phraseEmptyState.style.display = phrases.length === 0 ? "block" : "none";
+    phraseTable.style.display = phrases.length === 0 ? "none" : "table";
+    renderPaginationControls(phrasePagination, phrasePageState, filtered.length, renderPhraseTable);
+  }
+
+  phraseFilterInput.addEventListener("input", function () {
+    phrasePageState.page = 1;
+    renderPhraseTable();
+  });
+
+  // ---- tabs ----
+
+  function wireTabs(wordsBtn, phrasesBtn, wordsPanel, phrasesPanel, onSelect) {
+    function select(isWords) {
+      wordsBtn.classList.toggle("is-active", isWords);
+      wordsBtn.setAttribute("aria-selected", String(isWords));
+      phrasesBtn.classList.toggle("is-active", !isWords);
+      phrasesBtn.setAttribute("aria-selected", String(!isWords));
+      wordsPanel.hidden = !isWords;
+      phrasesPanel.hidden = isWords;
+      if (onSelect) onSelect(isWords ? "words" : "phrases");
+    }
+    wordsBtn.addEventListener("click", function () { select(true); });
+    phrasesBtn.addEventListener("click", function () { select(false); });
+  }
+
+  wireTabs(
+    document.getElementById("input-tab-words"),
+    document.getElementById("input-tab-phrases"),
+    document.getElementById("input-panel-words"),
+    document.getElementById("input-panel-phrases")
+  );
+
+  wireTabs(
+    document.getElementById("browse-tab-words"),
+    document.getElementById("browse-tab-phrases"),
+    document.getElementById("browse-panel-words"),
+    document.getElementById("browse-panel-phrases")
+  );
+
+  // ---- word entry form ----
 
   var form = document.getElementById("word-form");
   var pinyinInput = document.getElementById("pinyin-input");
@@ -194,7 +603,7 @@
   var formError = document.getElementById("form-error");
   var candidatesPanel = document.getElementById("candidates-panel");
 
-  // ---- meaning tags ----
+  // ---- meaning tags (word form) ----
 
   var meaningTags = [];
 
@@ -255,13 +664,10 @@
     if (meaningInput.value.trim()) addMeaningTag(meaningInput.value);
   });
 
-  // Pinyin -> [[hanzi, definition], ...] lookup, loaded from data/pinyin-hanzi.js.
-  var PINYIN_HANZI_DATA = window.PINYIN_HANZI_DATA || {};
-
   // The syllable currently being typed: the last whitespace-separated token,
   // as long as the caret hasn't moved past it with a trailing space.
-  function currentSyllableToken() {
-    var value = pinyinInput.value;
+  function lastSyllableToken(inputEl) {
+    var value = inputEl.value;
     if (value === "" || /\s$/.test(value)) return "";
     var tokens = value.trim().split(/\s+/);
     return tokens[tokens.length - 1];
@@ -273,7 +679,7 @@
 
   function renderCandidates() {
     clearCandidates();
-    var token = currentSyllableToken();
+    var token = lastSyllableToken(pinyinInput);
     if (!/[1-5]$/.test(token)) return; // only once the tone number is typed
 
     var converted = convertSyllable(token);
@@ -319,10 +725,6 @@
     renderCandidates();
   });
 
-  function makeId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
-
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     formError.textContent = "";
@@ -348,7 +750,7 @@
     });
 
     persistEntries();
-    render();
+    renderAll();
 
     form.reset();
     pinyinPreview.textContent = " ";
@@ -357,85 +759,324 @@
     hanziInput.focus();
   });
 
-  filterInput.addEventListener("input", render);
+  // ---- phrase entry form ----
 
-  // ---- export ----
+  var phraseForm = document.getElementById("phrase-form");
+  var phraseInput = document.getElementById("phrase-input");
+  var phraseHanziPreview = document.getElementById("phrase-hanzi-preview");
+  var phraseCandidatesPanel = document.getElementById("phrase-candidates-panel");
+  var phrasePinyinInput = document.getElementById("phrase-pinyin-input");
+  var phraseMeaningInput = document.getElementById("phrase-meaning-input");
+  var phraseTagsPreview = document.getElementById("phrase-tags-preview");
+  var phraseFormError = document.getElementById("phrase-form-error");
 
-  function download(filename, content, mime) {
-    var blob = new Blob([content], { type: mime });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  var phraseHanziBuffer = ""; // accumulated via candidate clicks, pinyin-typing mode only
+
+  function phraseInputHasCjk() {
+    return containsCjk(phraseInput.value);
   }
 
-  document.getElementById("export-json-btn").addEventListener("click", function () {
-    download("mandarin-word-list.json", JSON.stringify(entries, null, 2), "application/json");
-  });
+  function getPhraseFinalHanzi() {
+    return (phraseInputHasCjk() ? phraseInput.value : phraseHanziBuffer).trim();
+  }
 
-  function csvEscape(value) {
-    var str = String(value == null ? "" : value);
-    if (/[",\n]/.test(str)) {
-      str = '"' + str.replace(/"/g, '""') + '"';
+  function updatePhrasePreview() {
+    var text = phraseInputHasCjk() ? phraseInput.value : phraseHanziBuffer;
+    phraseHanziPreview.textContent = text || " ";
+  }
+
+  function updatePhraseTagsPreview() {
+    var hanzi = getPhraseFinalHanzi();
+    phraseTagsPreview.innerHTML = "";
+    var info = hanzi ? derivePhraseTags(hanzi, entries) : { tags: [] };
+    if (!info.tags.length) {
+      var hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = "No matching words yet.";
+      phraseTagsPreview.appendChild(hint);
+      return;
     }
-    return str;
-  }
-
-  document.getElementById("export-csv-btn").addEventListener("click", function () {
-    var rows = [["hanzi", "pinyin", "meaning", "createdAt"]];
-    entries.forEach(function (e) {
-      rows.push([e.hanzi, e.pinyin, e.meaning.join("; "), e.createdAt]);
+    info.tags.forEach(function (tag) {
+      var pill = document.createElement("span");
+      pill.className = "meaning-pill";
+      pill.textContent = tag;
+      phraseTagsPreview.appendChild(pill);
     });
-    var csv = rows.map(function (row) { return row.map(csvEscape).join(","); }).join("\n");
-    download("mandarin-word-list.csv", csv, "text/csv");
+  }
+
+  function clearPhraseCandidates() {
+    phraseCandidatesPanel.innerHTML = "";
+  }
+
+  function renderPhraseCandidates() {
+    clearPhraseCandidates();
+    var token = lastSyllableToken(phraseInput);
+    if (!/[1-5]$/.test(token)) return;
+
+    var converted = convertSyllable(token);
+    var candidates = PINYIN_HANZI_DATA[converted];
+    if (!candidates || !candidates.length) return;
+
+    candidates.forEach(function (pair) {
+      var hanzi = pair[0];
+      var definition = pair[1];
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "candidate-btn";
+      btn.title = definition;
+
+      var charSpan = document.createElement("span");
+      charSpan.className = "cb-char";
+      charSpan.textContent = hanzi;
+
+      var defSpan = document.createElement("span");
+      defSpan.className = "cb-def";
+      defSpan.textContent = definition;
+
+      btn.appendChild(charSpan);
+      btn.appendChild(defSpan);
+
+      btn.addEventListener("click", function () {
+        phraseHanziBuffer += hanzi;
+        phraseInput.value = phraseInput.value.replace(/\S+$/, converted) + " ";
+        phrasePinyinInput.value = convertPinyin(phraseInput.value);
+        updatePhrasePreview();
+        updatePhraseTagsPreview();
+        clearPhraseCandidates();
+        phraseInput.focus();
+      });
+
+      phraseCandidatesPanel.appendChild(btn);
+    });
+  }
+
+  phraseInput.addEventListener("input", function () {
+    if (phraseInputHasCjk()) {
+      phraseHanziBuffer = "";
+      clearPhraseCandidates();
+    } else {
+      phrasePinyinInput.value = convertPinyin(phraseInput.value);
+      renderPhraseCandidates();
+    }
+    updatePhrasePreview();
+    updatePhraseTagsPreview();
   });
 
-  // ---- import ----
+  phraseForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    phraseFormError.textContent = "";
 
-  var ioStatus = document.getElementById("io-status");
-
-  function parseCsv(text) {
-    var rows = [];
-    var row = [];
-    var field = "";
-    var inQuotes = false;
-
-    for (var i = 0; i < text.length; i++) {
-      var c = text[i];
-      if (inQuotes) {
-        if (c === '"' && text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else if (c === '"') {
-          inQuotes = false;
-        } else {
-          field += c;
-        }
-      } else if (c === '"') {
-        inQuotes = true;
-      } else if (c === ",") {
-        row.push(field);
-        field = "";
-      } else if (c === "\n" || c === "\r") {
-        if (c === "\r" && text[i + 1] === "\n") i++;
-        row.push(field);
-        rows.push(row);
-        row = [];
-        field = "";
-      } else {
-        field += c;
-      }
+    var hanzi = getPhraseFinalHanzi();
+    if (!hanzi) {
+      phraseFormError.textContent = "Hanzi is required — type pinyin to build it, or paste Hanzi directly.";
+      return;
     }
-    if (field.length || row.length) {
-      row.push(field);
-      rows.push(row);
+
+    var pinyin = phrasePinyinInput.value.trim();
+    if (!pinyin) {
+      pinyin = autoFillPinyinForHanzi(hanzi, entries);
     }
-    return rows.filter(function (r) { return r.length > 1 || r[0] !== ""; });
+
+    phrases.push({
+      id: makeId(),
+      hanzi: hanzi,
+      pinyin: pinyin,
+      meaning: phraseMeaningInput.value.trim(),
+      createdAt: new Date().toISOString()
+    });
+
+    persistEntries();
+    renderAll();
+
+    phraseForm.reset();
+    phraseHanziBuffer = "";
+    clearPhraseCandidates();
+    updatePhrasePreview();
+    updatePhraseTagsPreview();
+    phraseInput.focus();
+  });
+
+  updatePhraseTagsPreview();
+
+  // ---- search ----
+
+  var searchInput = document.getElementById("search-input");
+  var searchResults = document.getElementById("search-results");
+  var SEARCH_INLINE_CAP = 6;
+  var searchPageState = { page: 1, pageSize: 20 };
+  var searchExpanded = false;
+
+  function computeSearchMatches(query) {
+    var q = query.trim().toLowerCase();
+    if (!q) return { words: [], phrases: [] };
+    var qPlain = stripDiacritics(q);
+
+    var matchedWords = entries.filter(function (w) {
+      return (
+        w.hanzi.toLowerCase().indexOf(q) !== -1 ||
+        stripDiacritics(w.pinyin.toLowerCase()).indexOf(qPlain) !== -1 ||
+        w.meaning.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; })
+      );
+    });
+
+    var matchedPhrases = phrases.filter(function (p) {
+      var info = derivePhraseTags(p.hanzi, entries);
+      return (
+        p.hanzi.toLowerCase().indexOf(q) !== -1 ||
+        info.tags.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; })
+      );
+    });
+
+    return { words: matchedWords, phrases: matchedPhrases };
   }
+
+  function buildTagsRow(tags) {
+    var tagsEl = document.createElement("div");
+    tagsEl.className = "rc-tags";
+    tags.forEach(function (tag) {
+      var pill = document.createElement("span");
+      pill.className = "meaning-pill";
+      pill.textContent = tag;
+      tagsEl.appendChild(pill);
+    });
+    return tagsEl;
+  }
+
+  function buildHeadword(kindLabel, hanzi, pinyin) {
+    var head = document.createElement("div");
+    head.className = "rc-headword";
+    var kind = document.createElement("div");
+    kind.className = "rc-kind";
+    kind.textContent = kindLabel;
+    var hanziEl = document.createElement("div");
+    hanziEl.className = "rc-hanzi";
+    hanziEl.textContent = hanzi;
+    var pinyinEl = document.createElement("div");
+    pinyinEl.className = "rc-pinyin";
+    pinyinEl.textContent = pinyin;
+    head.appendChild(kind);
+    head.appendChild(hanziEl);
+    head.appendChild(pinyinEl);
+    return head;
+  }
+
+  function buildWordCard(word) {
+    var card = document.createElement("div");
+    card.className = "result-card";
+
+    var phrasesEl = document.createElement("div");
+    phrasesEl.className = "rc-phrases";
+    var top = topPhrasesForWord(word, phrases, entries, 2);
+    if (!top.length) {
+      var none = document.createElement("div");
+      none.className = "rc-phrase-meaning rc-none";
+      none.textContent = "No example sentences yet.";
+      phrasesEl.appendChild(none);
+    } else {
+      top.forEach(function (item) {
+        var line = document.createElement("div");
+        line.className = "rc-phrase-hanzi";
+        line.textContent = item.phrase.hanzi;
+        var meaningLine = document.createElement("div");
+        meaningLine.className = "rc-phrase-meaning";
+        meaningLine.textContent = item.phrase.meaning || "(no meaning yet)";
+        phrasesEl.appendChild(line);
+        phrasesEl.appendChild(meaningLine);
+      });
+    }
+
+    card.appendChild(buildHeadword("Word", word.hanzi, word.pinyin));
+    card.appendChild(buildTagsRow(word.meaning));
+    card.appendChild(phrasesEl);
+    return card;
+  }
+
+  function buildPhraseCard(phrase) {
+    var card = document.createElement("div");
+    card.className = "result-card";
+
+    var info = derivePhraseTags(phrase.hanzi, entries);
+
+    var phrasesEl = document.createElement("div");
+    phrasesEl.className = "rc-phrases";
+    var meaningLine = document.createElement("div");
+    meaningLine.className = "rc-phrase-meaning";
+    meaningLine.textContent = phrase.meaning || "(no meaning yet)";
+    phrasesEl.appendChild(meaningLine);
+
+    card.appendChild(buildHeadword("Phrase", phrase.hanzi, phrase.pinyin));
+    card.appendChild(buildTagsRow(info.tags));
+    card.appendChild(phrasesEl);
+    return card;
+  }
+
+  function renderSearch() {
+    var query = searchInput.value;
+    if (!query.trim()) {
+      searchResults.hidden = true;
+      searchResults.innerHTML = "";
+      searchExpanded = false;
+      return;
+    }
+
+    var matches = computeSearchMatches(query);
+    var combined = matches.words
+      .map(function (w) { return { type: "word", item: w, createdAt: w.createdAt }; })
+      .concat(matches.phrases.map(function (p) { return { type: "phrase", item: p, createdAt: p.createdAt }; }));
+    combined.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+
+    searchResults.hidden = false;
+    searchResults.innerHTML = "";
+
+    if (!combined.length) {
+      var noneMsg = document.createElement("p");
+      noneMsg.className = "empty-state";
+      noneMsg.textContent = "No matches in your saved words or phrases.";
+      searchResults.appendChild(noneMsg);
+      return;
+    }
+
+    var visibleItems = searchExpanded ? paginate(combined, searchPageState) : combined.slice(0, SEARCH_INLINE_CAP);
+
+    visibleItems.forEach(function (wrap) {
+      var card = wrap.type === "word" ? buildWordCard(wrap.item) : buildPhraseCard(wrap.item);
+      searchResults.appendChild(card);
+    });
+
+    if (!searchExpanded && combined.length > SEARCH_INLINE_CAP) {
+      var remaining = combined.length - SEARCH_INLINE_CAP;
+      var showMoreBtn = document.createElement("button");
+      showMoreBtn.type = "button";
+      showMoreBtn.className = "search-show-more";
+      showMoreBtn.textContent = "Show " + remaining + " more result" + (remaining === 1 ? "" : "s");
+      showMoreBtn.addEventListener("click", function () {
+        searchExpanded = true;
+        searchPageState.page = 1;
+        renderSearch();
+      });
+      searchResults.appendChild(showMoreBtn);
+    } else if (searchExpanded) {
+      var paginationContainer = document.createElement("div");
+      paginationContainer.className = "pagination";
+      searchResults.appendChild(paginationContainer);
+      renderPaginationControls(paginationContainer, searchPageState, combined.length, renderSearch);
+    }
+  }
+
+  searchInput.addEventListener("input", function () {
+    searchExpanded = false;
+    searchPageState.page = 1;
+    renderSearch();
+  });
+
+  function renderAll() {
+    renderWordTable();
+    renderPhraseTable();
+    renderSearch();
+  }
+
+  // ---- word key / merge (dedup by hanzi + pinyin + meaning set) ----
 
   function entryKey(e) {
     var meaningKey = e.meaning.slice().sort().join("");
@@ -447,7 +1088,7 @@
     entries.forEach(function (e) { existingKeys[entryKey(e)] = true; });
 
     var added = 0;
-    newOnes.forEach(function (raw) {
+    (newOnes || []).forEach(function (raw) {
       var hanzi = (raw.hanzi || "").trim();
       var pinyin = (raw.pinyin || "").trim();
       var meaning = normalizeMeaning(raw.meaning);
@@ -470,40 +1111,164 @@
     return added;
   }
 
-  document.getElementById("import-input").addEventListener("change", function (event) {
+  // ---- phrase key / merge (dedup by exact hanzi text) ----
+
+  function mergePhrases(newOnes) {
+    var existingKeys = {};
+    phrases.forEach(function (p) { existingKeys[p.hanzi] = true; });
+
+    var added = 0;
+    (newOnes || []).forEach(function (raw) {
+      var hanzi = (raw.hanzi || "").trim();
+      if (!hanzi || existingKeys[hanzi]) return;
+      existingKeys[hanzi] = true;
+
+      phrases.push({
+        id: raw.id || makeId(),
+        hanzi: hanzi,
+        pinyin: (raw.pinyin || "").trim(),
+        meaning: (raw.meaning || "").trim(),
+        createdAt: raw.createdAt || new Date().toISOString()
+      });
+      added++;
+    });
+    return added;
+  }
+
+  // ---- JSON export/import (words + phrases together) ----
+
+  var ioStatus = document.getElementById("io-status");
+
+  document.getElementById("export-json-btn").addEventListener("click", function () {
+    download(
+      "mandarin-word-list.json",
+      JSON.stringify({ words: entries, phrases: phrases }, null, 2),
+      "application/json"
+    );
+  });
+
+  document.getElementById("import-json-input").addEventListener("change", function (event) {
     var file = event.target.files[0];
     if (!file) return;
 
     var reader = new FileReader();
     reader.onload = function () {
-      var text = String(reader.result);
-      var added = 0;
       try {
-        if (/\.json$/i.test(file.name)) {
-          var parsed = JSON.parse(text);
-          if (!Array.isArray(parsed)) throw new Error("JSON must be an array of entries.");
-          added = mergeEntries(parsed);
+        var parsed = JSON.parse(String(reader.result));
+        var wordsIn, phrasesIn;
+        if (Array.isArray(parsed)) {
+          wordsIn = parsed; // legacy words-only export
+          phrasesIn = [];
+        } else if (parsed && typeof parsed === "object") {
+          wordsIn = Array.isArray(parsed.words) ? parsed.words : [];
+          phrasesIn = Array.isArray(parsed.phrases) ? parsed.phrases : [];
         } else {
-          var rows = parseCsv(text);
-          if (!rows.length) throw new Error("CSV file is empty.");
-          var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
-          var hIdx = header.indexOf("hanzi");
-          var pIdx = header.indexOf("pinyin");
-          var mIdx = header.indexOf("meaning");
-          if (hIdx === -1 || pIdx === -1 || mIdx === -1) {
-            throw new Error("CSV header must include hanzi, pinyin, meaning columns.");
-          }
-          var objs = rows.slice(1).map(function (r) {
-            var tags = (r[mIdx] || "").split(/\s*;\s*/).filter(Boolean);
-            return { hanzi: r[hIdx], pinyin: r[pIdx], meaning: tags };
-          });
-          added = mergeEntries(objs);
+          throw new Error("Unrecognized JSON shape.");
         }
+
+        var addedWords = mergeEntries(wordsIn);
+        var addedPhrases = mergePhrases(phrasesIn);
         persistEntries();
-        render();
-        ioStatus.textContent = "Imported " + added + " new entr" + (added === 1 ? "y" : "ies") + ".";
+        renderAll();
+        ioStatus.textContent =
+          "Imported " + addedWords + " word" + (addedWords === 1 ? "" : "s") +
+          " and " + addedPhrases + " phrase" + (addedPhrases === 1 ? "" : "s") + ".";
       } catch (err) {
         ioStatus.textContent = "Import failed: " + err.message;
+      }
+      event.target.value = "";
+    };
+    reader.readAsText(file);
+  });
+
+  // ---- word CSV export/import (scoped to Words browse tab) ----
+
+  var wordCsvStatus = document.getElementById("word-csv-status");
+
+  document.getElementById("export-words-csv-btn").addEventListener("click", function () {
+    var rows = [["hanzi", "pinyin", "meaning", "createdAt"]];
+    entries.forEach(function (e) {
+      rows.push([e.hanzi, e.pinyin, e.meaning.join("; "), e.createdAt]);
+    });
+    var csv = rows.map(function (row) { return row.map(csvEscape).join(","); }).join("\n");
+    download("mandarin-word-list-words.csv", csv, "text/csv");
+  });
+
+  document.getElementById("import-words-csv-input").addEventListener("change", function (event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var rows = parseCsv(String(reader.result));
+        if (!rows.length) throw new Error("CSV file is empty.");
+        var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+        var hIdx = header.indexOf("hanzi");
+        var pIdx = header.indexOf("pinyin");
+        var mIdx = header.indexOf("meaning");
+        if (hIdx === -1 || pIdx === -1 || mIdx === -1) {
+          throw new Error("CSV header must include hanzi, pinyin, meaning columns.");
+        }
+        var objs = rows.slice(1).map(function (r) {
+          var tags = (r[mIdx] || "").split(/\s*;\s*/).filter(Boolean);
+          return { hanzi: r[hIdx], pinyin: r[pIdx], meaning: tags };
+        });
+        var added = mergeEntries(objs);
+        persistEntries();
+        renderAll();
+        wordCsvStatus.textContent = "Imported " + added + " new word" + (added === 1 ? "" : "s") + ".";
+      } catch (err) {
+        wordCsvStatus.textContent = "Import failed: " + err.message;
+      }
+      event.target.value = "";
+    };
+    reader.readAsText(file);
+  });
+
+  // ---- phrase CSV export/import (scoped to Phrases browse tab) ----
+
+  var phraseCsvStatus = document.getElementById("phrase-csv-status");
+
+  document.getElementById("export-phrases-csv-btn").addEventListener("click", function () {
+    var rows = [["hanzi", "pinyin", "meaning", "tags", "createdAt"]];
+    phrases.forEach(function (p) {
+      var info = derivePhraseTags(p.hanzi, entries);
+      rows.push([p.hanzi, p.pinyin, p.meaning, info.tags.join("; "), p.createdAt]);
+    });
+    var csv = rows.map(function (row) { return row.map(csvEscape).join(","); }).join("\n");
+    download("mandarin-word-list-phrases.csv", csv, "text/csv");
+  });
+
+  document.getElementById("import-phrases-csv-input").addEventListener("change", function (event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var rows = parseCsv(String(reader.result));
+        if (!rows.length) throw new Error("CSV file is empty.");
+        var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+        var hIdx = header.indexOf("hanzi");
+        var pIdx = header.indexOf("pinyin");
+        var mIdx = header.indexOf("meaning");
+        if (hIdx === -1) throw new Error("CSV header must include a hanzi column.");
+        // "tags" column, if present, is ignored on import -- tags are always
+        // derived dynamically from the current word list, never stored.
+        var objs = rows.slice(1).map(function (r) {
+          return {
+            hanzi: r[hIdx],
+            pinyin: pIdx !== -1 ? r[pIdx] : "",
+            meaning: mIdx !== -1 ? r[mIdx] : ""
+          };
+        });
+        var added = mergePhrases(objs);
+        persistEntries();
+        renderAll();
+        phraseCsvStatus.textContent = "Imported " + added + " new phrase" + (added === 1 ? "" : "s") + ".";
+      } catch (err) {
+        phraseCsvStatus.textContent = "Import failed: " + err.message;
       }
       event.target.value = "";
     };
@@ -533,13 +1298,27 @@
     return opfsRootPromise;
   }
 
+  function snapshotPayload() {
+    return JSON.stringify({ words: entries, phrases: phrases }, null, 2);
+  }
+
+  function parseSnapshotPayload(text) {
+    if (!text.trim()) return { words: [], phrases: [] };
+    var parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return { words: parsed, phrases: [] };
+    return {
+      words: Array.isArray(parsed.words) ? parsed.words : [],
+      phrases: Array.isArray(parsed.phrases) ? parsed.phrases : []
+    };
+  }
+
   function writeSnapshotToOpfs() {
     return getOpfsRoot().then(function (root) {
       if (!root) return;
       return root.getFileHandle(OPFS_SAVE_FILENAME, { create: true })
         .then(function (fileHandle) { return fileHandle.createWritable(); })
         .then(function (writable) {
-          return writable.write(JSON.stringify(entries, null, 2)).then(function () {
+          return writable.write(snapshotPayload()).then(function () {
             return writable.close();
           });
         })
@@ -547,17 +1326,13 @@
     });
   }
 
-  function readOpfsEntries() {
+  function readOpfsData() {
     return getOpfsRoot().then(function (root) {
       if (!root) return null;
       return root.getFileHandle(OPFS_SAVE_FILENAME)
         .then(function (fileHandle) { return fileHandle.getFile(); })
         .then(function (file) { return file.text(); })
-        .then(function (text) {
-          if (!text.trim()) return [];
-          var parsed = JSON.parse(text);
-          return Array.isArray(parsed) ? parsed : [];
-        })
+        .then(parseSnapshotPayload)
         .catch(function () { return null; });
     });
   }
@@ -572,14 +1347,16 @@
       // Merge in anything already saved to internal storage (e.g. from a
       // previous visit before localStorage existed, or after it was
       // cleared), then make sure internal storage has today's list too.
-      return readOpfsEntries().then(function (opfsEntries) {
-        if (opfsEntries === null) {
+      return readOpfsData().then(function (data) {
+        if (data === null) {
           return writeSnapshotToOpfs();
         }
-        var added = mergeEntries(opfsEntries);
-        if (added > 0) {
+        var addedWords = mergeEntries(data.words);
+        var addedPhrases = mergePhrases(data.phrases);
+        if (addedWords > 0 || addedPhrases > 0) {
           saveEntries(entries);
-          render();
+          savePhrases(phrases);
+          renderAll();
         }
         return writeSnapshotToOpfs();
       });
@@ -669,7 +1446,7 @@
     return connectedDirHandle.getFileHandle(FOLDER_SAVE_FILENAME, { create: true })
       .then(function (fileHandle) { return fileHandle.createWritable(); })
       .then(function (writable) {
-        return writable.write(JSON.stringify(entries, null, 2)).then(function () {
+        return writable.write(snapshotPayload()).then(function () {
           return writable.close();
         });
       })
@@ -679,24 +1456,21 @@
   }
 
   // Saves to localStorage (always), internal browser storage (if supported),
-  // and the explicitly connected folder (if any).
+  // and the explicitly connected folder (if any) -- words and phrases both.
   function persistEntries() {
     saveEntries(entries);
+    savePhrases(phrases);
     writeSnapshotToOpfs();
     writeSnapshotToFolder();
   }
 
   // Reads the save file from a folder. Resolves null if the folder doesn't
   // have one yet (first time connecting this folder).
-  function readFolderEntries(dirHandle) {
+  function readFolderData(dirHandle) {
     return dirHandle.getFileHandle(FOLDER_SAVE_FILENAME)
       .then(function (fileHandle) { return fileHandle.getFile(); })
       .then(function (file) { return file.text(); })
-      .then(function (text) {
-        if (!text.trim()) return [];
-        var parsed = JSON.parse(text);
-        return Array.isArray(parsed) ? parsed : [];
-      })
+      .then(parseSnapshotPayload)
       .catch(function (err) {
         if (err && err.name === "NotFoundError") return null;
         throw err;
@@ -705,22 +1479,25 @@
 
   function connectToFolder(dirHandle) {
     connectedDirHandle = dirHandle;
-    return readFolderEntries(dirHandle)
-      .then(function (folderEntries) {
-        if (folderEntries === null) {
-          return writeSnapshotToFolder().then(function () { return 0; });
+    return readFolderData(dirHandle)
+      .then(function (data) {
+        if (data === null) {
+          return writeSnapshotToFolder().then(function () { return { words: 0, phrases: 0 }; });
         }
-        var added = mergeEntries(folderEntries);
+        var addedWords = mergeEntries(data.words);
+        var addedPhrases = mergePhrases(data.phrases);
         saveEntries(entries);
-        render();
-        return writeSnapshotToFolder().then(function () { return added; });
+        savePhrases(phrases);
+        renderAll();
+        return writeSnapshotToFolder().then(function () { return { words: addedWords, phrases: addedPhrases }; });
       })
       .then(function (added) {
         setConnectedUi(dirHandle);
-        if (added > 0) {
+        if (added.words > 0 || added.phrases > 0) {
           setFolderStatus(
             "Connected: “" + dirHandle.name + "” (autosaving) — merged " +
-            added + " entr" + (added === 1 ? "y" : "ies") + " from folder."
+            added.words + " word" + (added.words === 1 ? "" : "s") + " and " +
+            added.phrases + " phrase" + (added.phrases === 1 ? "" : "s") + " from folder."
           );
         }
       })
@@ -788,5 +1565,5 @@
       .catch(function () { /* no previous folder, or it's no longer accessible */ });
   }
 
-  render();
+  renderAll();
 })();

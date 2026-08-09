@@ -14,39 +14,80 @@
   </header>
 
   <main>
-    <section class="entry-form" aria-labelledby="form-heading">
-      <h2 id="form-heading">Add an entry</h2>
-      <form id="word-form">
-        <div class="field">
-          <label for="pinyin-input">Pinyin (use tone numbers 1&ndash;4, 5 for neutral)</label>
-          <input type="text" id="pinyin-input" placeholder="e.g. ni3 hao3" autocomplete="off">
-          <div class="preview" id="pinyin-preview" aria-live="polite">&nbsp;</div>
-          <div class="candidates" id="candidates-panel" aria-live="polite"></div>
-        </div>
+    <!-- ============ TOP: INPUT SECTION ============ -->
+    <section class="input-section" aria-labelledby="input-heading">
+      <h2 id="input-heading">Add an entry</h2>
 
-        <div class="field">
-          <label for="hanzi-input">Hanzi <span class="hint">(click a candidate above to append, or type directly)</span></label>
-          <input type="text" id="hanzi-input" placeholder="e.g. 你好" autocomplete="off">
-        </div>
-
-        <div class="field">
-          <label for="meaning-input">Meaning <span class="hint">(press Enter or , to add a tag)</span></label>
-          <div class="tag-input" id="meaning-tag-input">
-            <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
-          </div>
-        </div>
-
-        <button type="submit">Add Entry</button>
-        <span id="form-error" class="error" role="alert"></span>
-      </form>
-    </section>
-
-    <section class="list-section" aria-labelledby="list-heading">
-      <div class="list-header">
-        <h2 id="list-heading">Your list (<span id="entry-count">0</span>)</h2>
-        <input type="search" id="filter-input" placeholder="Filter by hanzi, pinyin, or meaning" aria-label="Filter list">
+      <div class="tabs" role="tablist" aria-label="Entry type">
+        <button type="button" class="tab-btn is-active" id="input-tab-words" role="tab" aria-selected="true">Words</button>
+        <button type="button" class="tab-btn" id="input-tab-phrases" role="tab" aria-selected="false">Phrases</button>
       </div>
 
+      <div class="tab-panel" id="input-panel-words">
+        <form id="word-form">
+          <div class="field">
+            <label for="pinyin-input">Pinyin (use tone numbers 1&ndash;4, 5 for neutral)</label>
+            <input type="text" id="pinyin-input" placeholder="e.g. ni3 hao3" autocomplete="off">
+            <div class="preview" id="pinyin-preview" aria-live="polite">&nbsp;</div>
+            <div class="candidates" id="candidates-panel" aria-live="polite"></div>
+          </div>
+
+          <div class="field">
+            <label for="hanzi-input">Hanzi <span class="hint">(click a candidate above to append, or type directly)</span></label>
+            <input type="text" id="hanzi-input" placeholder="e.g. 你好" autocomplete="off">
+          </div>
+
+          <div class="field">
+            <label for="meaning-input">Meaning <span class="hint">(press Enter or , to add a tag)</span></label>
+            <div class="tag-input" id="meaning-tag-input">
+              <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
+            </div>
+          </div>
+
+          <button type="submit">Add Word</button>
+          <span id="form-error" class="error" role="alert"></span>
+        </form>
+      </div>
+
+      <div class="tab-panel" id="input-panel-phrases" hidden>
+        <form id="phrase-form">
+          <div class="field">
+            <label for="phrase-input">Phrase <span class="hint">(type pinyin with tone numbers, or paste Hanzi directly)</span></label>
+            <input type="text" id="phrase-input" placeholder="e.g. wo3 ai4 ni3 &mdash; or paste 我爱你" autocomplete="off">
+            <div class="preview" id="phrase-hanzi-preview" aria-live="polite">&nbsp;</div>
+            <div class="candidates" id="phrase-candidates-panel" aria-live="polite"></div>
+          </div>
+
+          <div class="field">
+            <label for="phrase-pinyin-input">Pinyin <span class="hint">(auto-filled for pasted Hanzi &mdash; editable)</span></label>
+            <input type="text" id="phrase-pinyin-input" placeholder="pinyin" autocomplete="off">
+          </div>
+
+          <div class="field">
+            <label for="phrase-meaning-input">Meaning <span class="hint">(optional, plain text)</span></label>
+            <input type="text" id="phrase-meaning-input" placeholder="e.g. I love you" autocomplete="off">
+          </div>
+
+          <div class="field">
+            <label>Tags <span class="hint">(auto-derived from matched words)</span></label>
+            <div class="tag-preview" id="phrase-tags-preview"><span class="hint">No matching words yet.</span></div>
+          </div>
+
+          <button type="submit">Add Phrase</button>
+          <span id="phrase-form-error" class="error" role="alert"></span>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ MIDDLE: SEARCH SECTION ============ -->
+    <section class="search-section" aria-labelledby="search-heading">
+      <h2 id="search-heading">Search</h2>
+      <input type="search" id="search-input" placeholder="Search your saved words or phrases by hanzi, pinyin, or tag" aria-label="Search your vocabulary">
+      <div class="search-results" id="search-results" hidden></div>
+    </section>
+
+    <!-- ============ cross-cutting data toolbar ============ -->
+    <section class="toolbar-section" aria-label="Data management">
       <div class="toolbar">
         <div class="toolbar-group" id="folder-sync-group">
           <button type="button" id="connect-folder-btn">Connect Local Folder</button>
@@ -55,29 +96,91 @@
           <span id="opfs-status" role="status"></span>
         </div>
         <div class="toolbar-group">
-          <button type="button" id="export-json-btn">Export JSON</button>
-          <button type="button" id="export-csv-btn">Export CSV</button>
+          <button type="button" id="export-json-btn">Export JSON (words + phrases)</button>
           <label class="file-btn">
-            Import
-            <input type="file" id="import-input" accept=".json,.csv" hidden>
+            Import JSON
+            <input type="file" id="import-json-input" accept=".json" hidden>
           </label>
           <span id="io-status" role="status"></span>
         </div>
       </div>
+    </section>
 
-      <table id="word-table">
-        <thead>
-          <tr>
-            <th>Hanzi</th>
-            <th>Pinyin</th>
-            <th>Meaning</th>
-            <th>Added</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="word-table-body"></tbody>
-      </table>
-      <p id="empty-state" class="empty-state">No entries yet &mdash; add your first word above.</p>
+    <!-- ============ BOTTOM: BROWSE SECTION ============ -->
+    <section class="browse-section" aria-labelledby="browse-heading">
+      <h2 id="browse-heading">Your vocabulary</h2>
+
+      <div class="tabs" role="tablist" aria-label="Browse type">
+        <button type="button" class="tab-btn is-active" id="browse-tab-words" role="tab" aria-selected="true">Words</button>
+        <button type="button" class="tab-btn" id="browse-tab-phrases" role="tab" aria-selected="false">Phrases</button>
+      </div>
+
+      <div class="tab-panel" id="browse-panel-words">
+        <div class="list-header">
+          <span id="word-count-label">0 words</span>
+          <input type="search" id="word-filter-input" placeholder="Filter by hanzi, pinyin, or meaning" aria-label="Filter words">
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <button type="button" id="export-words-csv-btn">Export CSV</button>
+            <label class="file-btn">
+              Import CSV
+              <input type="file" id="import-words-csv-input" accept=".csv" hidden>
+            </label>
+            <span id="word-csv-status" role="status"></span>
+          </div>
+        </div>
+
+        <table id="word-table">
+          <thead>
+            <tr>
+              <th>Hanzi</th>
+              <th>Pinyin</th>
+              <th>Meaning</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="word-table-body"></tbody>
+        </table>
+        <p id="word-empty-state" class="empty-state">No words yet &mdash; add your first one above.</p>
+        <div class="pagination" id="word-pagination"></div>
+      </div>
+
+      <div class="tab-panel" id="browse-panel-phrases" hidden>
+        <div class="list-header">
+          <span id="phrase-count-label">0 phrases</span>
+          <input type="search" id="phrase-filter-input" placeholder="Filter by hanzi or meaning" aria-label="Filter phrases">
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <button type="button" id="export-phrases-csv-btn">Export CSV</button>
+            <label class="file-btn">
+              Import CSV
+              <input type="file" id="import-phrases-csv-input" accept=".csv" hidden>
+            </label>
+            <span id="phrase-csv-status" role="status"></span>
+          </div>
+        </div>
+
+        <table id="phrase-table">
+          <thead>
+            <tr>
+              <th>Hanzi</th>
+              <th>Pinyin</th>
+              <th>Meaning</th>
+              <th>Tags</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="phrase-table-body"></tbody>
+        </table>
+        <p id="phrase-empty-state" class="empty-state">No phrases yet &mdash; add your first one above.</p>
+        <div class="pagination" id="phrase-pagination"></div>
+      </div>
     </section>
   </main>
 
