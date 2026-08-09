@@ -1895,10 +1895,12 @@
   // expected, not a bug.
 
   var GOOGLE_CLIENT_ID = "40984349574-0q0oiaq9tf2rrr9jss6kqb94ualglbgj.apps.googleusercontent.com";
+  var DRIVE_FOLDER_NAME = "Monday";
   var DRIVE_FILE_NAME = "mandarin-word-list.json";
   var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
   var driveAccessToken = null;
+  var driveFolderId = null;
   var driveFileId = null;
   var driveTokenClient = null;
 
@@ -1933,6 +1935,7 @@
     return fetch(url, options).then(function (res) {
       if (res.status === 401) {
         driveAccessToken = null;
+        driveFolderId = null;
         driveFileId = null;
         setDriveDisconnectedUi("Google Drive session expired — click Connect to resume.");
         throw new Error("Drive session expired");
@@ -1944,13 +1947,45 @@
     });
   }
 
-  // drive.file scope only ever surfaces files this app created (or the user
-  // explicitly opened with it via a picker, which this app doesn't use), so
-  // a plain name search here reliably finds a file this same app created on
-  // any device, for this Google account -- that's what makes a fresh device
-  // able to find existing data with no prior setup.
-  function findDriveFile() {
-    var q = encodeURIComponent("name='" + DRIVE_FILE_NAME + "' and trashed=false");
+  // drive.file scope only ever surfaces files/folders this app created (or
+  // the user explicitly opened with it via a picker, which this app doesn't
+  // use), so a plain name search here reliably finds a folder or file this
+  // same app created on any device, for this Google account -- that's what
+  // makes a fresh device able to find existing data with no prior setup.
+  function findDriveFolder() {
+    var q = encodeURIComponent(
+      "name='" + DRIVE_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    );
+    return driveApiFetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id,modifiedTime)&spaces=drive")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var folders = data.files || [];
+        if (!folders.length) return null;
+        folders.sort(function (a, b) { return new Date(b.modifiedTime) - new Date(a.modifiedTime); });
+        return folders[0].id;
+      });
+  }
+
+  function createDriveFolder() {
+    return driveApiFetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { return data.id; });
+  }
+
+  function findOrCreateDriveFolder() {
+    return findDriveFolder().then(function (folderId) {
+      return folderId || createDriveFolder();
+    });
+  }
+
+  function findDriveFile(folderId) {
+    var q = encodeURIComponent(
+      "name='" + DRIVE_FILE_NAME + "' and trashed=false and '" + folderId + "' in parents"
+    );
     return driveApiFetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id,modifiedTime)&spaces=drive")
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -1967,12 +2002,12 @@
       .then(parseSnapshotPayload);
   }
 
-  function createDriveFile() {
+  function createDriveFile(folderId) {
     var boundary = "monday-" + makeId();
     var body =
       "--" + boundary + "\r\n" +
       "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
-      JSON.stringify({ name: DRIVE_FILE_NAME, mimeType: "application/json" }) + "\r\n" +
+      JSON.stringify({ name: DRIVE_FILE_NAME, mimeType: "application/json", parents: [folderId] }) + "\r\n" +
       "--" + boundary + "\r\n" +
       "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
       snapshotPayload() + "\r\n" +
@@ -2004,7 +2039,11 @@
   }
 
   function connectToDrive() {
-    return findDriveFile()
+    return findOrCreateDriveFolder()
+      .then(function (folderId) {
+        driveFolderId = folderId;
+        return findDriveFile(folderId);
+      })
       .then(function (fileId) {
         if (fileId) {
           driveFileId = fileId;
@@ -2018,13 +2057,13 @@
             return writeDriveFile().then(function () { return { words: addedWords, phrases: addedPhrases }; });
           });
         }
-        return createDriveFile().then(function (newFileId) {
+        return createDriveFile(driveFolderId).then(function (newFileId) {
           driveFileId = newFileId;
           return { words: 0, phrases: 0 };
         });
       })
       .then(function (added) {
-        var msg = "Connected to Google Drive (autosaving)";
+        var msg = "Connected to Google Drive (in “" + DRIVE_FOLDER_NAME + "” folder, autosaving)";
         if (added.words > 0 || added.phrases > 0) {
           msg +=
             " — merged " + added.words + " word" + (added.words === 1 ? "" : "s") +
@@ -2034,6 +2073,7 @@
       })
       .catch(function (err) {
         driveAccessToken = null;
+        driveFolderId = null;
         driveFileId = null;
         setDriveDisconnectedUi("Couldn't connect to Drive: " + err.message);
       });
@@ -2066,6 +2106,7 @@
       google.accounts.oauth2.revoke(driveAccessToken, function () {});
     }
     driveAccessToken = null;
+    driveFolderId = null;
     driveFileId = null;
     setDriveDisconnectedUi("Disconnected. Entries stay saved in this browser.");
   });
