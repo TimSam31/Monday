@@ -272,6 +272,17 @@
     return { matchedWords: matched, tags: tags };
   }
 
+  // All phrases containing this exact word (matched by id, not just hanzi
+  // text, so it can't accidentally pick up a different word entry that
+  // happens to share the same hanzi). Used both to decide whether a word's
+  // card needs a "view more" link and to populate that detail list.
+  function phrasesContainingWord(word, phraseList, wordList) {
+    return phraseList.filter(function (p) {
+      var info = derivePhraseTags(p.hanzi, wordList);
+      return info.matchedWords.some(function (w) { return w.id === word.id; });
+    });
+  }
+
   // Ranks phrases containing `word` by how much the *rest* of the phrase's
   // vocabulary echoes that word's own tags (a rough relevance signal),
   // tie-broken by most recently added.
@@ -665,6 +676,17 @@
   var phraseFilterInput = document.getElementById("phrase-filter-input");
   var phrasePagination = document.getElementById("phrase-pagination");
   var phrasePageState = { page: 1, pageSize: 20 };
+
+  // Tags are derived, not entered, and can get noisy on longer phrases --
+  // hidden by default (already reflected in the "tags-hidden" class in the
+  // markup), with a small toggle to reveal them for whoever wants to see.
+  var phraseTagsVisible = false;
+  var toggleTagsBtn = document.getElementById("toggle-phrase-tags-btn");
+  toggleTagsBtn.addEventListener("click", function () {
+    phraseTagsVisible = !phraseTagsVisible;
+    phraseTable.classList.toggle("tags-hidden", !phraseTagsVisible);
+    toggleTagsBtn.textContent = phraseTagsVisible ? "Hide Tags" : "Show Tags";
+  });
 
   function renderPhraseTable() {
     var query = phraseFilterInput.value.trim().toLowerCase();
@@ -1104,28 +1126,21 @@
   var searchPageState = { page: 1, pageSize: 20 };
   var searchExpanded = false;
 
+  // Search only ever matches saved Words directly. Phrases surface as the
+  // "top 2 related phrases" nested under whichever word matched, not as
+  // their own standalone search results.
   function computeSearchMatches(query) {
     var q = query.trim().toLowerCase();
-    if (!q) return { words: [], phrases: [] };
+    if (!q) return [];
     var qPlain = stripDiacritics(q);
 
-    var matchedWords = entries.filter(function (w) {
+    return entries.filter(function (w) {
       return (
         w.hanzi.toLowerCase().indexOf(q) !== -1 ||
         stripDiacritics(w.pinyin.toLowerCase()).indexOf(qPlain) !== -1 ||
         w.meaning.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; })
       );
     });
-
-    var matchedPhrases = phrases.filter(function (p) {
-      var info = derivePhraseTags(p.hanzi, entries);
-      return (
-        p.hanzi.toLowerCase().indexOf(q) !== -1 ||
-        info.tags.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; })
-      );
-    });
-
-    return { words: matchedWords, phrases: matchedPhrases };
   }
 
   function buildTagsRow(tags) {
@@ -1164,6 +1179,7 @@
 
     var phrasesEl = document.createElement("div");
     phrasesEl.className = "rc-phrases";
+    var allMatching = phrasesContainingWord(word, phrases, entries);
     var top = topPhrasesForWord(word, phrases, entries, 2);
     if (!top.length) {
       var none = document.createElement("div");
@@ -1175,12 +1191,28 @@
         var line = document.createElement("div");
         line.className = "rc-phrase-hanzi";
         line.textContent = item.phrase.hanzi;
+        var pinyinLine = document.createElement("div");
+        pinyinLine.className = "rc-phrase-pinyin";
+        pinyinLine.textContent = item.phrase.pinyin;
         var meaningLine = document.createElement("div");
         meaningLine.className = "rc-phrase-meaning";
         meaningLine.textContent = item.phrase.meaning || "(no meaning yet)";
         phrasesEl.appendChild(line);
+        phrasesEl.appendChild(pinyinLine);
         phrasesEl.appendChild(meaningLine);
       });
+      if (allMatching.length > top.length) {
+        var viewMoreBtn = document.createElement("button");
+        viewMoreBtn.type = "button";
+        viewMoreBtn.className = "secondary-btn tiny-btn rc-view-more";
+        viewMoreBtn.textContent = "View all " + allMatching.length + " phrases";
+        viewMoreBtn.addEventListener("click", function () {
+          wordPhraseDetailFor = word.id;
+          wordPhraseDetailPageState = { page: 1, pageSize: 20 };
+          renderSearch();
+        });
+        phrasesEl.appendChild(viewMoreBtn);
+      }
     }
 
     card.appendChild(buildHeadword("Word", word.hanzi, word.pinyin));
@@ -1203,31 +1235,92 @@
     return card;
   }
 
-  function buildPhraseCard(phrase) {
-    var card = document.createElement("div");
-    card.className = "result-card";
+  // ---- per-word phrase detail view ("View all N phrases with X") ----
+  //
+  // Distinct from the general search "Show more": this filters to phrases
+  // containing this *exact* word (same id, i.e. same hanzi and pinyin),
+  // not the broader set of words the query happens to also match (e.g.
+  // homophones with different hanzi).
 
-    var info = derivePhraseTags(phrase.hanzi, entries);
+  var wordPhraseDetailFor = null;
+  var wordPhraseDetailPageState = { page: 1, pageSize: 20 };
 
-    var phrasesEl = document.createElement("div");
-    phrasesEl.className = "rc-phrases";
+  function buildPhraseDetailItem(phrase) {
+    var item = document.createElement("div");
+    item.className = "result-card phrase-detail-item";
+
+    var hanziEl = document.createElement("div");
+    hanziEl.className = "rc-phrase-hanzi";
+    hanziEl.textContent = phrase.hanzi;
+    item.appendChild(hanziEl);
+
+    var pinyinEl = document.createElement("div");
+    pinyinEl.className = "rc-phrase-pinyin";
+    pinyinEl.textContent = phrase.pinyin;
+    item.appendChild(pinyinEl);
+
     if (editingPhraseId === phrase.id) {
-      phrasesEl.appendChild(buildPhraseMeaningEditor(phrase));
+      item.appendChild(buildPhraseMeaningEditor(phrase));
     } else {
       var meaningLine = document.createElement("div");
       meaningLine.className = "rc-phrase-meaning";
       meaningLine.textContent = phrase.meaning || "(no meaning yet)";
-      phrasesEl.appendChild(meaningLine);
-      phrasesEl.appendChild(buildEditTrigger(function () {
+      item.appendChild(meaningLine);
+      item.appendChild(buildEditTrigger(function () {
         editingPhraseId = phrase.id;
         renderAll();
       }, "Edit meaning for " + phrase.hanzi));
     }
 
-    card.appendChild(buildHeadword("Phrase", phrase.hanzi, phrase.pinyin));
-    card.appendChild(buildTagsRow(info.tags));
-    card.appendChild(phrasesEl);
-    return card;
+    return item;
+  }
+
+  function renderWordPhraseDetail() {
+    var word = entries.find(function (w) { return w.id === wordPhraseDetailFor; });
+    if (!word) {
+      wordPhraseDetailFor = null;
+      renderSearch();
+      return;
+    }
+
+    searchResults.hidden = false;
+    searchResults.innerHTML = "";
+
+    var backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "secondary-btn back-btn";
+    backBtn.textContent = "← Back to search results";
+    backBtn.addEventListener("click", function () {
+      wordPhraseDetailFor = null;
+      renderSearch();
+    });
+    searchResults.appendChild(backBtn);
+
+    var heading = document.createElement("h3");
+    heading.className = "detail-heading";
+    heading.textContent = "Phrases with " + word.hanzi + " (" + word.pinyin + ")";
+    searchResults.appendChild(heading);
+
+    var matching = phrasesContainingWord(word, phrases, entries).slice().reverse();
+    var list = document.createElement("div");
+    list.className = "phrase-detail-list";
+
+    if (!matching.length) {
+      var none = document.createElement("p");
+      none.className = "empty-state";
+      none.textContent = "No phrases yet.";
+      list.appendChild(none);
+    } else {
+      paginate(matching, wordPhraseDetailPageState).forEach(function (phrase) {
+        list.appendChild(buildPhraseDetailItem(phrase));
+      });
+    }
+    searchResults.appendChild(list);
+
+    var paginationEl = document.createElement("div");
+    paginationEl.className = "pagination";
+    searchResults.appendChild(paginationEl);
+    renderPaginationControls(paginationEl, wordPhraseDetailPageState, matching.length, renderWordPhraseDetail);
   }
 
   function renderSearch() {
@@ -1236,35 +1329,37 @@
       searchResults.hidden = true;
       searchResults.innerHTML = "";
       searchExpanded = false;
+      wordPhraseDetailFor = null;
       return;
     }
 
-    var matches = computeSearchMatches(query);
-    var combined = matches.words
-      .map(function (w) { return { type: "word", item: w, createdAt: w.createdAt }; })
-      .concat(matches.phrases.map(function (p) { return { type: "phrase", item: p, createdAt: p.createdAt }; }));
-    combined.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    if (wordPhraseDetailFor) {
+      renderWordPhraseDetail();
+      return;
+    }
+
+    var matchedWords = computeSearchMatches(query);
+    var sorted = matchedWords.slice().sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
 
     searchResults.hidden = false;
     searchResults.innerHTML = "";
 
-    if (!combined.length) {
+    if (!sorted.length) {
       var noneMsg = document.createElement("p");
       noneMsg.className = "empty-state";
-      noneMsg.textContent = "No matches in your saved words or phrases.";
+      noneMsg.textContent = "No matching words saved.";
       searchResults.appendChild(noneMsg);
       return;
     }
 
-    var visibleItems = searchExpanded ? paginate(combined, searchPageState) : combined.slice(0, SEARCH_INLINE_CAP);
+    var visibleItems = searchExpanded ? paginate(sorted, searchPageState) : sorted.slice(0, SEARCH_INLINE_CAP);
 
-    visibleItems.forEach(function (wrap) {
-      var card = wrap.type === "word" ? buildWordCard(wrap.item) : buildPhraseCard(wrap.item);
-      searchResults.appendChild(card);
+    visibleItems.forEach(function (word) {
+      searchResults.appendChild(buildWordCard(word));
     });
 
-    if (!searchExpanded && combined.length > SEARCH_INLINE_CAP) {
-      var remaining = combined.length - SEARCH_INLINE_CAP;
+    if (!searchExpanded && sorted.length > SEARCH_INLINE_CAP) {
+      var remaining = sorted.length - SEARCH_INLINE_CAP;
       var showMoreBtn = document.createElement("button");
       showMoreBtn.type = "button";
       showMoreBtn.className = "search-show-more";
@@ -1279,13 +1374,14 @@
       var paginationContainer = document.createElement("div");
       paginationContainer.className = "pagination";
       searchResults.appendChild(paginationContainer);
-      renderPaginationControls(paginationContainer, searchPageState, combined.length, renderSearch);
+      renderPaginationControls(paginationContainer, searchPageState, sorted.length, renderSearch);
     }
   }
 
   searchInput.addEventListener("input", function () {
     searchExpanded = false;
     searchPageState.page = 1;
+    wordPhraseDetailFor = null;
     renderSearch();
   });
 

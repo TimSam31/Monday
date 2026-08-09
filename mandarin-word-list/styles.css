@@ -308,6 +308,7 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
 .delete-btn:hover { color: var(--accent); background: transparent; }
 
 .edit-btn {
+  align-self: flex-start;
   background: transparent;
   border: none;
   color: var(--muted);
@@ -420,6 +421,11 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
   font-size: 1rem;
 }
 
+.result-card .rc-phrase-pinyin {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
 .result-card .rc-phrase-meaning {
   font-style: italic;
   color: var(--muted);
@@ -433,6 +439,55 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
 
 .search-show-more {
   align-self: center;
+}
+
+.rc-view-more {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+}
+
+/* ---- per-word phrase detail view ---- */
+
+.back-btn {
+  align-self: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.detail-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.phrase-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.result-card.phrase-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.phrase-detail-item .rc-phrase-hanzi {
+  font-size: 1.2rem;
+}
+
+/* ---- phrase browse table: tags column toggle ---- */
+
+.table-toggle-row {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.tiny-btn {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+#phrase-table.tags-hidden th:nth-child(4),
+#phrase-table.tags-hidden td:nth-child(4) {
+  display: none;
 }
 
 /* ---- pagination ---- */

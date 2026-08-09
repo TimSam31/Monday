@@ -35,12 +35,13 @@ Only Hanzi is required to save a phrase.
 
 ## Search
 
-One search box, matching only your own saved data (never the bundled candidate reference set used for the candidate picker):
+One search box, matching only your own saved **Words** — by hanzi, pinyin, or any meaning tag (never the bundled candidate reference set used for the candidate picker). Phrases never appear as their own search result; they only ever show up nested under whichever word matched.
 
-- **Words** by hanzi, pinyin, or any meaning tag.
-- **Phrases** by hanzi, or by their derived tags.
+Each match renders as a word card: hanzi and pinyin large on the left, tags top-right (with an Edit link). Below that, its top 2 related example phrases — ranked by how much the rest of each phrase's vocabulary echoes the word's own tags, tie-broken by most recent — each shown as hanzi, then pinyin, then its meaning in italic. Word results are capped inline; a "Show N more results" button expands the full list with the same pagination controls used for browsing.
 
-Each match renders as a card: hanzi and pinyin large on the left, tags top-right. A word card also shows its top 2 related example phrases (ranked by how much the rest of that phrase's vocabulary echoes the word's own tags, tie-broken by most recent), each with its meaning in italic underneath. Results are capped inline; a "Show N more results" button expands the full list with the same pagination controls used for browsing.
+### Viewing all phrases for a word
+
+If a word has more than 2 related phrases, a small **View all N phrases** button opens a detail list of every phrase containing that exact word (same hanzi *and* pinyin — a different word that happens to sound the same, like a homophone, is excluded), with its own pagination and the same inline Edit for each phrase's meaning. This is a different scope than the "Show N more results" button: that one broadens across *different* words your query happens to also match (e.g. several homophones with different hanzi); this one narrows to *only* the one word you asked about. A **← Back to search results** link returns to the normal results list.
 
 ## Editing an entry
 
@@ -48,7 +49,7 @@ An **Edit** link sits next to a word's tags or a phrase's meaning, both in the v
 
 ## Browsing your vocabulary
 
-Words and Phrases each get their own tab, a quick text filter, and pagination (20/50/100/200 per page).
+Words and Phrases each get their own tab, a quick text filter, and pagination (20/50/100/200 per page). The Phrases table's derived Tags column is hidden by default (it can get noisy on longer phrases) — a small **Show Tags** button above the table reveals it.
 
 ## Export / Import
 
