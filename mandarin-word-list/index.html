@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Monday</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Monday</h1>
+    <p class="subtitle">Keep a running list &mdash; add an entry, keep going.</p>
+  </header>
+
+  <main>
+    <section class="entry-form" aria-labelledby="form-heading">
+      <h2 id="form-heading">Add an entry</h2>
+      <form id="word-form">
+        <div class="field">
+          <label for="pinyin-input">Pinyin (use tone numbers 1&ndash;4, 5 for neutral)</label>
+          <input type="text" id="pinyin-input" placeholder="e.g. ni3 hao3" autocomplete="off">
+          <div class="preview" id="pinyin-preview" aria-live="polite">&nbsp;</div>
+          <div class="candidates" id="candidates-panel" aria-live="polite"></div>
+        </div>
+
+        <div class="field">
+          <label for="hanzi-input">Hanzi <span class="hint">(click a candidate above to append, or type directly)</span></label>
+          <input type="text" id="hanzi-input" placeholder="e.g. 你好" autocomplete="off">
+        </div>
+
+        <div class="field">
+          <label for="meaning-input">Meaning <span class="hint">(press Enter or , to add a tag)</span></label>
+          <div class="tag-input" id="meaning-tag-input">
+            <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
+          </div>
+        </div>
+
+        <button type="submit">Add Entry</button>
+        <span id="form-error" class="error" role="alert"></span>
+      </form>
+    </section>
+
+    <section class="list-section" aria-labelledby="list-heading">
+      <div class="list-header">
+        <h2 id="list-heading">Your list (<span id="entry-count">0</span>)</h2>
+        <input type="search" id="filter-input" placeholder="Filter by hanzi, pinyin, or meaning" aria-label="Filter list">
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-group" id="folder-sync-group">
+          <button type="button" id="connect-folder-btn">Connect Local Folder</button>
+          <button type="button" id="disconnect-folder-btn" hidden>Disconnect</button>
+          <span id="folder-status" role="status"></span>
+          <span id="opfs-status" role="status"></span>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" id="export-json-btn">Export JSON</button>
+          <button type="button" id="export-csv-btn">Export CSV</button>
+          <label class="file-btn">
+            Import
+            <input type="file" id="import-input" accept=".json,.csv" hidden>
+          </label>
+          <span id="io-status" role="status"></span>
+        </div>
+      </div>
+
+      <table id="word-table">
+        <thead>
+          <tr>
+            <th>Hanzi</th>
+            <th>Pinyin</th>
+            <th>Meaning</th>
+            <th>Added</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="word-table-body"></tbody>
+      </table>
+      <p id="empty-state" class="empty-state">No entries yet &mdash; add your first word above.</p>
+    </section>
+  </main>
+
+  <script src="data/pinyin-hanzi.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
