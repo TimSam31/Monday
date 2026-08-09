@@ -114,6 +114,10 @@ input[type="text"], input[type="search"] {
   font-size: 0.8rem;
 }
 
+.folder-sync-hint {
+  margin: 0.75rem 0 0;
+}
+
 .candidates {
   display: flex;
   flex-wrap: wrap;
