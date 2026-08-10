@@ -445,6 +445,65 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
   align-self: center;
 }
 
+/* ---- CC-CEDICT reference lookup panel ---- */
+
+.cedict-panel {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
+.cedict-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.cedict-entry {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+}
+
+.cedict-entry .ce-headword {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.cedict-entry .ce-hanzi {
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+.cedict-entry .ce-traditional {
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.cedict-entry .ce-pinyin {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.cedict-entry .ce-defs {
+  margin: 0.3rem 0 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.cedict-loading,
+.cedict-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.cedict-more-btn {
+  align-self: center;
+}
+
 .rc-view-more {
   align-self: flex-start;
   margin-top: 0.15rem;

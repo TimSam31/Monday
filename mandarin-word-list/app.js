@@ -1378,11 +1378,185 @@
     }
   }
 
+  // ---- CC-CEDICT reference lookup ----
+  //
+  // A secondary, read-only panel beneath your own search results: a lookup
+  // against the open CC-CEDICT dictionary (hanzi or pinyin), never mixed
+  // into your saved Words/Phrases data or storage. The ~8MB dataset is
+  // only fetched the first time it's actually needed (lazy-loaded via a
+  // dynamically injected <script>), not on page load.
+
+  var cedictPanel = document.getElementById("cedict-panel");
+  var cedictResultsEl = document.getElementById("cedict-results");
+  var CEDICT_INLINE_CAP = 8;
+  var cedictExpanded = false;
+  var cedictPageState = { page: 1, pageSize: 20 };
+  var cedictData = null;
+  var cedictLoadPromise = null;
+
+  function loadCedict() {
+    if (cedictData) return Promise.resolve(cedictData);
+    if (cedictLoadPromise) return cedictLoadPromise;
+    cedictLoadPromise = new Promise(function (resolve, reject) {
+      var script = document.createElement("script");
+      script.src = "data/cedict.js";
+      script.onload = function () {
+        cedictData = window.CEDICT_DATA || [];
+        resolve(cedictData);
+      };
+      script.onerror = function () {
+        cedictLoadPromise = null;
+        reject(new Error("Failed to load CC-CEDICT reference data."));
+      };
+      document.body.appendChild(script);
+    });
+    return cedictLoadPromise;
+  }
+
+  // CC-CEDICT's raw pinyin field uses "u:" for ü (its own long-standing
+  // convention), distinct from this app's "v" convention used elsewhere
+  // (see convertSyllable) — translate before reusing convertPinyin/matching.
+  function normalizeForPinyinMatch(text) {
+    return stripDiacritics((text || "").toLowerCase())
+      .replace(/u:/g, "v")
+      .replace(/[^a-z]/g, "");
+  }
+
+  function cedictPinyinToDisplay(py) {
+    return convertPinyin(py.replace(/u:/g, "v"));
+  }
+
+  function computeCedictMatches(query) {
+    var q = query.trim();
+    if (!q || !cedictData) return [];
+
+    if (containsCjk(q)) {
+      return cedictData.filter(function (entry) {
+        return entry[1].indexOf(q) !== -1 || (entry[0] && entry[0].indexOf(q) !== -1);
+      });
+    }
+
+    var qPlain = normalizeForPinyinMatch(q);
+    if (!qPlain) return [];
+    return cedictData.filter(function (entry) {
+      return normalizeForPinyinMatch(entry[2]).indexOf(qPlain) !== -1;
+    });
+  }
+
+  function buildCedictEntry(entry) {
+    var trad = entry[0], simp = entry[1], py = entry[2], defs = entry[3];
+
+    var card = document.createElement("div");
+    card.className = "cedict-entry";
+
+    var head = document.createElement("div");
+    head.className = "ce-headword";
+
+    var hanziEl = document.createElement("span");
+    hanziEl.className = "ce-hanzi";
+    hanziEl.textContent = simp;
+    head.appendChild(hanziEl);
+
+    if (trad) {
+      var tradEl = document.createElement("span");
+      tradEl.className = "ce-traditional";
+      tradEl.textContent = "(" + trad + ")";
+      head.appendChild(tradEl);
+    }
+
+    var pinyinEl = document.createElement("span");
+    pinyinEl.className = "ce-pinyin";
+    pinyinEl.textContent = cedictPinyinToDisplay(py);
+    head.appendChild(pinyinEl);
+
+    card.appendChild(head);
+
+    var defsEl = document.createElement("p");
+    defsEl.className = "ce-defs";
+    defsEl.textContent = defs.join("; ");
+    card.appendChild(defsEl);
+
+    return card;
+  }
+
+  function renderCedictPanel(query) {
+    var q = query.trim();
+    if (!q) {
+      cedictPanel.hidden = true;
+      cedictResultsEl.innerHTML = "";
+      cedictExpanded = false;
+      return;
+    }
+
+    if (!cedictData) {
+      cedictPanel.hidden = false;
+      cedictResultsEl.innerHTML = "";
+      var loading = document.createElement("p");
+      loading.className = "cedict-loading";
+      loading.textContent = "Loading dictionary reference\u2026";
+      cedictResultsEl.appendChild(loading);
+
+      loadCedict().then(function () {
+        if (searchInput.value.trim() === q) renderCedictPanel(searchInput.value);
+      }).catch(function () {
+        if (searchInput.value.trim() !== q) return;
+        cedictResultsEl.innerHTML = "";
+        var err = document.createElement("p");
+        err.className = "cedict-empty";
+        err.textContent = "Couldn't load the dictionary reference (offline or blocked).";
+        cedictResultsEl.appendChild(err);
+      });
+      return;
+    }
+
+    var matches = computeCedictMatches(q);
+    cedictPanel.hidden = false;
+    cedictResultsEl.innerHTML = "";
+
+    if (!matches.length) {
+      var none = document.createElement("p");
+      none.className = "cedict-empty";
+      none.textContent = "No dictionary matches.";
+      cedictResultsEl.appendChild(none);
+      return;
+    }
+
+    var visible = cedictExpanded ? paginate(matches, cedictPageState) : matches.slice(0, CEDICT_INLINE_CAP);
+    visible.forEach(function (entry) {
+      cedictResultsEl.appendChild(buildCedictEntry(entry));
+    });
+
+    if (!cedictExpanded && matches.length > CEDICT_INLINE_CAP) {
+      var remaining = matches.length - CEDICT_INLINE_CAP;
+      var moreBtn = document.createElement("button");
+      moreBtn.type = "button";
+      moreBtn.className = "cedict-more-btn";
+      moreBtn.textContent = "Show " + remaining + " more dictionary result" + (remaining === 1 ? "" : "s");
+      moreBtn.addEventListener("click", function () {
+        cedictExpanded = true;
+        cedictPageState.page = 1;
+        renderCedictPanel(searchInput.value);
+      });
+      cedictResultsEl.appendChild(moreBtn);
+    } else if (cedictExpanded) {
+      var paginationContainer = document.createElement("div");
+      paginationContainer.className = "pagination";
+      cedictResultsEl.appendChild(paginationContainer);
+      renderPaginationControls(paginationContainer, cedictPageState, matches.length, function () {
+        renderCedictPanel(searchInput.value);
+      });
+    }
+  }
+
   searchInput.addEventListener("input", function () {
     searchExpanded = false;
     searchPageState.page = 1;
     wordPhraseDetailFor = null;
     renderSearch();
+
+    cedictExpanded = false;
+    cedictPageState.page = 1;
+    renderCedictPanel(searchInput.value);
   });
 
   function renderAll() {

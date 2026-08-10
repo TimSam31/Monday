@@ -43,6 +43,14 @@ Each match renders as a word card: hanzi and pinyin large on the left, tags top-
 
 If a word has more than 2 related phrases, a small **View all N phrases** button opens a detail list of every phrase containing that exact word (same hanzi *and* pinyin — a different word that happens to sound the same, like a homophone, is excluded), with its own pagination and the same inline Edit for each phrase's meaning. This is a different scope than the "Show N more results" button: that one broadens across *different* words your query happens to also match (e.g. several homophones with different hanzi); this one narrows to *only* the one word you asked about. A **← Back to search results** link returns to the normal results list.
 
+## Dictionary reference (CC-CEDICT)
+
+Below your own search results, a second panel looks up your query against the open [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) Chinese-English dictionary (~107,000 entries) &mdash; by hanzi (simplified or traditional) or by pinyin. It's a **read-only reference**, entirely separate from your saved Words/Phrases: results never get added to your list, aren't saved anywhere, and don't affect search, export, storage, or anything else in the app.
+
+The dictionary data (~8.5MB) is **lazy-loaded**: it's only fetched the first time you actually type a search query, not on page load, so it costs nothing for anyone who never uses this panel. The first lookup shows a brief "Loading dictionary reference…" message; after that it's cached for the rest of the session. Results are capped inline with a "Show N more dictionary results" expansion, using the same pagination style as the rest of the app.
+
+Data source: CC-CEDICT, Copyright (C) 2005-2026 [MDBG](https://www.mdbg.net/), licensed [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), referencing CEDICT (Copyright 1997, 1998 Paul Andrew Denisowski). Bundled as `data/cedict.js`, mirrored from [regisb/CC-CEDICT](https://github.com/regisb/CC-CEDICT).
+
 ## Editing an entry
 
 An **Edit** link sits next to a word's tags or a phrase's meaning, both in the vocabulary table and on search result cards — clicking it turns that spot into the same removable-tag-chip editor used when adding a word (for a word) or a plain text box (for a phrase's meaning), with **Save**/**Cancel**. A word needs at least one tag to save. Hanzi and pinyin aren't editable this way (re-typing those is closer to just adding a new entry and deleting the old one); a phrase's tags never are, since they're always derived from the current word list. Only one entry is ever mid-edit at a time — opening the editor for the same word from the table and from a search card shows the identical in-progress edit in both places, since it's the same state either way.
