@@ -152,6 +152,11 @@ input[type="text"], input[type="search"] {
   line-height: 1.2;
 }
 
+.candidate-btn .cb-pinyin {
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+
 .candidate-btn .cb-def {
   font-size: 0.65rem;
   color: var(--muted);

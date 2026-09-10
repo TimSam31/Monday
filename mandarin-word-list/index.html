@@ -38,10 +38,11 @@
           </div>
 
           <div class="field">
-            <label for="meaning-input">Meaning <span class="hint">(press Enter or , to add a tag)</span></label>
+            <label for="meaning-input">Meaning <span class="hint">(press Enter or , to add a tag &mdash; or pick a suggestion below to fill in Hanzi/Pinyin)</span></label>
             <div class="tag-input" id="meaning-tag-input">
               <input type="text" id="meaning-input" placeholder="e.g. hello" autocomplete="off">
             </div>
+            <div class="candidates" id="meaning-candidates-panel" aria-live="polite"></div>
           </div>
 
           <button type="submit">Add Word</button>

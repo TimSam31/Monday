@@ -20,6 +20,10 @@ The page has three parts, top to bottom:
 
 Hanzi, pinyin, and at least one meaning tag are all required to save a word.
 
+### Reverse lookup: meaning → hanzi/pinyin
+
+You can also go the other way: start typing an English meaning (2+ characters) and a row of matching hanzi candidates appears below the Meaning field, each showing its hanzi, pinyin, and definition. This checks two sources — the same single-character reference data used for the Pinyin candidates (available instantly), plus [CC-CEDICT](#dictionary-reference-cc-cedict) for multi-character words (lazy-loaded the first time you use either this or the Search dictionary panel). Click a suggestion to fill in Hanzi and Pinyin and add tags derived from its definition — you can still edit or remove any of them before saving, same as picking a pinyin candidate.
+
 ## Adding phrases
 
 Phrases are example sentences. One input auto-detects what you're giving it:

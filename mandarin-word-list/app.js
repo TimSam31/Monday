@@ -247,6 +247,33 @@
     return map;
   })();
 
+  // Flattened { hanzi, pinyin, definition } list for reverse meaning ->
+  // hanzi/pinyin lookup (single characters only; multi-character words come
+  // from the separately lazy-loaded CC-CEDICT data instead).
+  var SINGLE_CHAR_MEANING_INDEX = (function () {
+    var list = [];
+    Object.keys(PINYIN_HANZI_DATA).forEach(function (py) {
+      PINYIN_HANZI_DATA[py].forEach(function (pair) {
+        list.push({ hanzi: pair[0], pinyin: py, definition: pair[1] });
+      });
+    });
+    return list;
+  })();
+
+  // Scores how well a query matches a definition: 0 = exact atomic-gloss
+  // match, 1 = an atomic gloss starts with the query, 2 = substring anywhere,
+  // -1 = no match at all. Lower is better.
+  function scoreMeaningMatch(fragments, fullDefLower, qLower) {
+    for (var i = 0; i < fragments.length; i++) {
+      if (fragments[i] === qLower) return 0;
+    }
+    for (var i = 0; i < fragments.length; i++) {
+      if (fragments[i].indexOf(qLower) === 0) return 1;
+    }
+    if (fullDefLower.indexOf(qLower) !== -1) return 2;
+    return -1;
+  }
+
   // ---- word/phrase matching + derived tags ----
 
   function matchWordsInPhrase(phraseHanzi, wordList) {
@@ -818,6 +845,7 @@
   var meaningTagContainer = document.getElementById("meaning-tag-input");
   var formError = document.getElementById("form-error");
   var candidatesPanel = document.getElementById("candidates-panel");
+  var meaningCandidatesPanel = document.getElementById("meaning-candidates-panel");
 
   // ---- meaning tags (word form) ----
 
@@ -854,6 +882,7 @@
   function addMeaningTag(raw) {
     var tag = raw.trim();
     meaningInput.value = "";
+    meaningCandidatesPanel.innerHTML = "";
     if (!tag) return;
     var exists = meaningTags.some(function (t) { return t.toLowerCase() === tag.toLowerCase(); });
     if (!exists) meaningTags.push(tag);
@@ -863,6 +892,7 @@
   function resetMeaningTags() {
     meaningTags = [];
     meaningInput.value = "";
+    meaningCandidatesPanel.innerHTML = "";
     renderMeaningTags();
   }
 
@@ -879,6 +909,116 @@
   meaningInput.addEventListener("blur", function () {
     if (meaningInput.value.trim()) addMeaningTag(meaningInput.value);
   });
+
+  // ---- reverse lookup: meaning -> hanzi/pinyin suggestions ----
+  //
+  // As you type a meaning, suggest matching hanzi + pinyin below the field
+  // (single characters from the always-loaded candidate data, plus
+  // multi-character words from CC-CEDICT once it's lazy-loaded on first
+  // use here). Picking one fills in Hanzi/Pinyin and adds tags derived from
+  // that entry's own definition, same as picking a pinyin candidate does.
+
+  var MEANING_CANDIDATES_CAP = 8;
+
+  function computeMeaningMatches(query) {
+    var q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    var results = [];
+
+    SINGLE_CHAR_MEANING_INDEX.forEach(function (item) {
+      var fragments = splitDefinitionIntoTags(item.definition).map(function (s) { return s.toLowerCase(); });
+      var score = scoreMeaningMatch(fragments, item.definition.toLowerCase(), q);
+      if (score !== -1) {
+        results.push({ hanzi: item.hanzi, pinyin: item.pinyin, definition: item.definition, score: score });
+      }
+    });
+
+    if (cedictData) {
+      cedictData.forEach(function (entry) {
+        var defs = entry[3];
+        var fragments = defs.map(function (d) { return d.toLowerCase(); });
+        var fullDef = fragments.join("; ");
+        var score = scoreMeaningMatch(fragments, fullDef, q);
+        if (score !== -1) {
+          results.push({
+            hanzi: entry[1],
+            pinyin: cedictPinyinToDisplay(entry[2]),
+            definition: defs.join("; "),
+            score: score
+          });
+        }
+      });
+    }
+
+    results.sort(function (a, b) { return a.score - b.score; });
+
+    var seen = {};
+    var deduped = [];
+    results.forEach(function (r) {
+      if (seen[r.hanzi]) return;
+      seen[r.hanzi] = true;
+      deduped.push(r);
+    });
+
+    return deduped.slice(0, MEANING_CANDIDATES_CAP);
+  }
+
+  function renderMeaningCandidates() {
+    var query = meaningInput.value;
+    meaningCandidatesPanel.innerHTML = "";
+    if (!query.trim()) return;
+
+    if (!cedictData) {
+      loadCedict().then(function () {
+        if (meaningInput.value.trim() === query.trim()) renderMeaningCandidates();
+      }).catch(function () { /* offline/blocked: single-character suggestions still work */ });
+    }
+
+    computeMeaningMatches(query).forEach(function (item) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "candidate-btn";
+      btn.title = item.definition;
+
+      var charSpan = document.createElement("span");
+      charSpan.className = "cb-char";
+      charSpan.textContent = item.hanzi;
+
+      var pinyinSpan = document.createElement("span");
+      pinyinSpan.className = "cb-pinyin";
+      pinyinSpan.textContent = item.pinyin;
+
+      var defSpan = document.createElement("span");
+      defSpan.className = "cb-def";
+      defSpan.textContent = item.definition;
+
+      btn.appendChild(charSpan);
+      btn.appendChild(pinyinSpan);
+      btn.appendChild(defSpan);
+
+      // Prevent the mousedown's default focus shift: without this, clicking
+      // the button first blurs #meaning-input, whose blur handler commits
+      // the in-progress query text as a tag AND (since addMeaningTag clears
+      // this very panel) removes the button from the DOM before its own
+      // click ever fires.
+      btn.addEventListener("mousedown", function (event) {
+        event.preventDefault();
+      });
+
+      btn.addEventListener("click", function () {
+        hanziInput.value = item.hanzi;
+        pinyinInput.value = item.pinyin;
+        pinyinPreview.textContent = item.pinyin;
+        splitDefinitionIntoTags(item.definition).forEach(addMeaningTag);
+        meaningInput.focus();
+      });
+
+      meaningCandidatesPanel.appendChild(btn);
+    });
+  }
+
+  meaningInput.addEventListener("input", renderMeaningCandidates);
 
   // The syllable currently being typed: the last whitespace-separated token,
   // as long as the caret hasn't moved past it with a trailing space.
