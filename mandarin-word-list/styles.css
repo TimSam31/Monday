@@ -57,6 +57,31 @@ h2 { margin-top: 0; font-size: 1.1rem; }
   grid-column: 1 / -1;
 }
 
+.mode-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.mode-tab-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 0.5rem 1.1rem;
+  font-weight: 600;
+}
+
+.mode-tab-btn:hover {
+  background: var(--panel);
+  color: var(--accent);
+}
+
+.mode-tab-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .tabs {
   display: flex;
   gap: 0.4rem;
@@ -603,6 +628,94 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
   cursor: default;
   background: transparent;
   color: var(--muted);
+}
+
+/* ---- Quiz mode ---- */
+
+.quiz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.quiz-toggle-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.quiz-toggle-label {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-right: 0.15rem;
+}
+
+.toggle-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.toggle-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.toggle-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.quiz-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2.5rem 1.5rem;
+  min-height: 12rem;
+  justify-content: center;
+}
+
+/* An explicit display:flex above would otherwise outrank the browser's
+   default [hidden]{display:none} (author styles beat user-agent styles
+   regardless of specificity) -- this restores it, scoped to this element. */
+.quiz-card[hidden] {
+  display: none;
+}
+
+.quiz-hanzi {
+  font-size: 2.6rem;
+  line-height: 1.2;
+}
+
+.quiz-pinyin {
+  font-size: 1.3rem;
+  color: var(--accent);
+}
+
+.quiz-meaning {
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.quiz-card #quiz-reveal-btn {
+  margin-top: 0.5rem;
+}
+
+.quiz-actions {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 @media (max-width: 520px) {

@@ -14,8 +14,13 @@
   </header>
 
   <main>
+    <div class="mode-tabs" role="tablist" aria-label="App mode">
+      <button type="button" class="mode-tab-btn is-active" id="mode-tab-vocab" role="tab" aria-selected="true">Vocabulary</button>
+      <button type="button" class="mode-tab-btn" id="mode-tab-quiz" role="tab" aria-selected="false">Quiz</button>
+    </div>
+
     <!-- ============ TOP: INPUT SECTION ============ -->
-    <section class="input-section" aria-labelledby="input-heading">
+    <section class="input-section mode-vocab" aria-labelledby="input-heading">
       <h2 id="input-heading">Add an entry</h2>
 
       <div class="tabs" role="tablist" aria-label="Entry type">
@@ -81,7 +86,7 @@
     </section>
 
     <!-- ============ MIDDLE: SEARCH SECTION ============ -->
-    <section class="search-section" aria-labelledby="search-heading">
+    <section class="search-section mode-vocab" aria-labelledby="search-heading">
       <h2 id="search-heading">Search</h2>
       <input type="search" id="search-input" placeholder="Search your saved words or phrases by hanzi, pinyin, or tag" aria-label="Search your vocabulary">
       <div class="search-results" id="search-results" hidden></div>
@@ -94,7 +99,7 @@
     </section>
 
     <!-- ============ cross-cutting data toolbar ============ -->
-    <section class="toolbar-section" aria-label="Data management">
+    <section class="toolbar-section mode-vocab" aria-label="Data management">
       <div class="toolbar">
         <div class="toolbar-group" id="folder-sync-group">
           <button type="button" id="connect-folder-btn">Connect Local Folder</button>
@@ -120,7 +125,7 @@
     </section>
 
     <!-- ============ BOTTOM: BROWSE SECTION ============ -->
-    <section class="browse-section" aria-labelledby="browse-heading">
+    <section class="browse-section mode-vocab" aria-labelledby="browse-heading">
       <h2 id="browse-heading">Your vocabulary</h2>
 
       <div class="tabs" role="tablist" aria-label="Browse type">
@@ -197,6 +202,41 @@
         </table>
         <p id="phrase-empty-state" class="empty-state">No phrases yet &mdash; add your first one above.</p>
         <div class="pagination" id="phrase-pagination"></div>
+      </div>
+    </section>
+
+    <!-- ============ QUIZ MODE ============ -->
+    <section class="quiz-section mode-quiz" id="quiz-section" hidden aria-labelledby="quiz-heading">
+      <h2 id="quiz-heading">Quiz yourself</h2>
+
+      <div class="quiz-controls">
+        <div class="quiz-toggle-group" role="group" aria-label="Quiz from">
+          <span class="quiz-toggle-label">From</span>
+          <button type="button" class="toggle-btn is-active" data-quiz-source="words">Words</button>
+          <button type="button" class="toggle-btn" data-quiz-source="phrases">Phrases</button>
+          <button type="button" class="toggle-btn" data-quiz-source="both">Both</button>
+        </div>
+        <div class="quiz-toggle-group" role="group" aria-label="Show first">
+          <span class="quiz-toggle-label">Show</span>
+          <button type="button" class="toggle-btn is-active" data-quiz-prompt="hanzi">Hanzi</button>
+          <button type="button" class="toggle-btn" data-quiz-prompt="meaning">Meaning</button>
+          <button type="button" class="toggle-btn" data-quiz-prompt="random">Randomize</button>
+        </div>
+      </div>
+
+      <p id="quiz-empty" class="empty-state" hidden>Add some words or phrases first to quiz yourself.</p>
+
+      <div class="quiz-card" id="quiz-card" hidden>
+        <div class="rc-kind" id="quiz-kind">Word</div>
+        <div class="quiz-hanzi" id="quiz-hanzi"></div>
+        <div class="quiz-pinyin" id="quiz-pinyin" hidden></div>
+        <div class="quiz-meaning" id="quiz-meaning" hidden></div>
+        <button type="button" id="quiz-reveal-btn" class="secondary-btn">Show answer</button>
+      </div>
+
+      <div class="quiz-actions">
+        <button type="button" id="quiz-next-btn">Next word</button>
+        <span id="quiz-progress" class="hint"></span>
       </div>
     </section>
   </main>

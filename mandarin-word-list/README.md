@@ -6,11 +6,15 @@ A small, dependency-free web tool for building a personal Mandarin dictionary: s
 
 Open `index.html` in a browser (double-click it, or serve the folder with any static file server). No build step, no install.
 
-The page has three parts, top to bottom:
+Two modes, switched with the **Vocabulary** / **Quiz** tabs at the top of the page:
+
+**Vocabulary mode** has three parts, top to bottom:
 
 1. **Add an entry** — tabbed between **Words** and **Phrases**.
 2. **Search** — finds matches across both your words and phrases.
 3. **Your vocabulary** — tabbed, paginated browsing of everything you've saved.
+
+**Quiz mode** is a flashcard-style self-test over what you've saved — see [Quiz mode](#quiz-mode) below.
 
 ## Adding words
 
@@ -98,6 +102,16 @@ This uses the [File System Access API](https://developer.mozilla.org/en-US/docs/
 - **Disconnect** revokes the token and stops autosaving there; your entries remain in `localStorage`.
 
 Setup note: this requires a Google Cloud OAuth Client ID with the Drive API enabled and this site's URL listed under "Authorized JavaScript origins" — see `app.js`'s `GOOGLE_CLIENT_ID` constant. Loading `https://accounts.google.com/gsi/client` requires an internet connection; if it fails to load (offline, blocked, etc.) the button shows a message instead of erroring, and every other feature is unaffected.
+
+## Quiz mode
+
+A flashcard-style self-test over your own saved words and/or phrases — nothing here is stored, it just reads your existing list.
+
+- **From**: quiz from **Words**, **Phrases**, or **Both**.
+- **Show**: whether each card leads with **Hanzi** (guess the pinyin/meaning), **Meaning** (guess the hanzi), or **Randomize** (picks one or the other per card).
+- The hidden side (pinyin is always part of it, plus whichever of hanzi/meaning isn't the prompt) stays hidden until you click **Show answer**.
+- **Next word** draws another card. Switching *Show* alone re-quizzes the same card from the other angle instead of advancing.
+- Draws never repeat until every card in the current pool (per the *From* setting) has been shown once — a shuffled "deck" that's dealt through before it reshuffles for the next round, so you won't see the same word twice in a row while others are left untouched.
 
 ## Data format
 

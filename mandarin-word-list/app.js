@@ -1703,6 +1703,7 @@
     renderWordTable();
     renderPhraseTable();
     renderSearch();
+    if (quizSectionEl && !quizSectionEl.hidden) renderQuizCard();
   }
 
   // ---- word key / merge (dedup by hanzi + pinyin + meaning set) ----
@@ -2423,6 +2424,195 @@
     driveFolderId = null;
     driveFileId = null;
     setDriveDisconnectedUi("Disconnected. Entries stay saved in this browser.");
+  });
+
+  // ---- app mode: Vocabulary <-> Quiz ----
+
+  var modeVocabBtn = document.getElementById("mode-tab-vocab");
+  var modeQuizBtn = document.getElementById("mode-tab-quiz");
+  var vocabModeEls = document.querySelectorAll(".mode-vocab");
+  var quizModeEls = document.querySelectorAll(".mode-quiz");
+
+  function setAppMode(mode) {
+    var isQuiz = mode === "quiz";
+    vocabModeEls.forEach(function (el) { el.hidden = isQuiz; });
+    quizModeEls.forEach(function (el) { el.hidden = !isQuiz; });
+    modeVocabBtn.classList.toggle("is-active", !isQuiz);
+    modeVocabBtn.setAttribute("aria-selected", String(!isQuiz));
+    modeQuizBtn.classList.toggle("is-active", isQuiz);
+    modeQuizBtn.setAttribute("aria-selected", String(isQuiz));
+    if (isQuiz) renderQuizCard();
+  }
+
+  modeVocabBtn.addEventListener("click", function () { setAppMode("vocab"); });
+  modeQuizBtn.addEventListener("click", function () { setAppMode("quiz"); });
+
+  // ---- Quiz mode ----
+  //
+  // Draws random words/phrases as flashcards (hanzi or meaning shown,
+  // pinyin + the other side hidden until revealed). The "no repeats until
+  // you've seen everything" behavior is a shuffle-bag: each full pass
+  // through the current pool is shuffled once and drawn front-to-back;
+  // only once the bag is exhausted does it reshuffle and start a new pass.
+
+  var quizSectionEl = document.getElementById("quiz-section");
+  var quizEmptyEl = document.getElementById("quiz-empty");
+  var quizCardEl = document.getElementById("quiz-card");
+  var quizKindEl = document.getElementById("quiz-kind");
+  var quizHanziEl = document.getElementById("quiz-hanzi");
+  var quizPinyinEl = document.getElementById("quiz-pinyin");
+  var quizMeaningEl = document.getElementById("quiz-meaning");
+  var quizRevealBtn = document.getElementById("quiz-reveal-btn");
+  var quizNextBtn = document.getElementById("quiz-next-btn");
+  var quizProgressEl = document.getElementById("quiz-progress");
+  var quizSourceBtns = document.querySelectorAll("[data-quiz-source]");
+  var quizPromptBtns = document.querySelectorAll("[data-quiz-prompt]");
+
+  var quizSource = "words"; // "words" | "phrases" | "both"
+  var quizPromptSetting = "hanzi"; // "hanzi" | "meaning" | "random"
+  var quizBag = []; // shuffled {type, id} refs for the current pass
+  var quizBagIndex = -1; // index of the currently-drawn card within quizBag
+  var quizCurrentRef = null;
+  var quizCurrentItem = null;
+  var quizCurrentSide = "hanzi"; // resolved prompt side for the current card
+  var quizRevealed = false;
+
+  function getQuizPool() {
+    var pool = [];
+    if (quizSource === "words" || quizSource === "both") {
+      entries.forEach(function (w) { pool.push({ type: "word", id: w.id }); });
+    }
+    if (quizSource === "phrases" || quizSource === "both") {
+      phrases.forEach(function (p) { pool.push({ type: "phrase", id: p.id }); });
+    }
+    return pool;
+  }
+
+  function resolveQuizItem(ref) {
+    var list = ref.type === "word" ? entries : phrases;
+    return list.find(function (e) { return e.id === ref.id; }) || null;
+  }
+
+  function shuffled(array) {
+    var arr = array.slice();
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function pickPromptSide() {
+    if (quizPromptSetting === "random") return Math.random() < 0.5 ? "hanzi" : "meaning";
+    return quizPromptSetting;
+  }
+
+  // Advances to the next card in the shuffle bag, reshuffling a fresh pass
+  // once exhausted. Drops any stale refs (item deleted since the bag was
+  // built) instead of showing them.
+  function drawNextQuizCard() {
+    var pool = getQuizPool();
+    if (!pool.length) {
+      quizBag = [];
+      quizBagIndex = -1;
+      return null;
+    }
+
+    var guard = pool.length + quizBag.length + 2;
+    while (guard-- > 0) {
+      quizBagIndex++;
+      if (quizBagIndex >= quizBag.length) {
+        quizBag = shuffled(pool);
+        quizBagIndex = 0;
+      }
+      var ref = quizBag[quizBagIndex];
+      var item = resolveQuizItem(ref);
+      if (item) return { ref: ref, item: item };
+      quizBag.splice(quizBagIndex, 1);
+      quizBagIndex--;
+    }
+    return null;
+  }
+
+  function startNewQuizCard() {
+    var drawn = drawNextQuizCard();
+    quizCurrentRef = drawn ? drawn.ref : null;
+    quizCurrentItem = drawn ? drawn.item : null;
+    quizCurrentSide = pickPromptSide();
+    quizRevealed = false;
+  }
+
+  function renderQuizCard() {
+    if (!getQuizPool().length) {
+      quizEmptyEl.hidden = false;
+      quizCardEl.hidden = true;
+      quizProgressEl.textContent = "";
+      return;
+    }
+    quizEmptyEl.hidden = true;
+
+    if (quizCurrentRef) quizCurrentItem = resolveQuizItem(quizCurrentRef);
+    if (!quizCurrentRef || !quizCurrentItem) startNewQuizCard();
+
+    if (!quizCurrentItem) {
+      quizCardEl.hidden = true;
+      return;
+    }
+
+    quizCardEl.hidden = false;
+
+    var isWord = quizCurrentRef.type === "word";
+    quizKindEl.textContent = isWord ? "Word" : "Phrase";
+    quizHanziEl.textContent = quizCurrentItem.hanzi;
+    quizPinyinEl.textContent = quizCurrentItem.pinyin;
+    quizMeaningEl.textContent = isWord
+      ? quizCurrentItem.meaning.join(", ")
+      : (quizCurrentItem.meaning || "(no meaning yet)");
+
+    var showHanzi = quizCurrentSide === "hanzi" || quizRevealed;
+    var showMeaning = quizCurrentSide === "meaning" || quizRevealed;
+
+    quizHanziEl.hidden = !showHanzi;
+    quizMeaningEl.hidden = !showMeaning;
+    quizPinyinEl.hidden = !quizRevealed;
+    quizRevealBtn.hidden = quizRevealed;
+
+    quizProgressEl.textContent = quizBag.length
+      ? "Card " + (quizBagIndex + 1) + " of " + quizBag.length + " this round (no repeats until it reshuffles)"
+      : "";
+  }
+
+  quizRevealBtn.addEventListener("click", function () {
+    quizRevealed = true;
+    renderQuizCard();
+  });
+
+  quizNextBtn.addEventListener("click", function () {
+    startNewQuizCard();
+    renderQuizCard();
+  });
+
+  quizSourceBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      quizSource = btn.dataset.quizSource;
+      quizSourceBtns.forEach(function (b) { b.classList.toggle("is-active", b === btn); });
+      quizBag = [];
+      quizBagIndex = -1;
+      startNewQuizCard();
+      renderQuizCard();
+    });
+  });
+
+  quizPromptBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      quizPromptSetting = btn.dataset.quizPrompt;
+      quizPromptBtns.forEach(function (b) { b.classList.toggle("is-active", b === btn); });
+      if (quizCurrentRef) {
+        quizCurrentSide = pickPromptSide();
+        quizRevealed = false;
+      }
+      renderQuizCard();
+    });
   });
 
   renderAll();
