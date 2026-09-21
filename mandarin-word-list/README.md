@@ -101,7 +101,7 @@ This uses the [File System Access API](https://developer.mozilla.org/en-US/docs/
 - **The access token is short-lived (about an hour)** and there's no backend to silently refresh it, so it will periodically stop autosaving with a "session expired" message — click **Connect Google Drive** again (a quick Google consent screen) to resume. This is expected, not a bug: it's the trade-off for a pure client-side integration with no server holding a secret.
 - **Disconnect** revokes the token and stops autosaving there; your entries remain in `localStorage`.
 
-Setup note: this requires a Google Cloud OAuth Client ID with the Drive API enabled and this site's URL listed under "Authorized JavaScript origins" — see `app.js`'s `GOOGLE_CLIENT_ID` constant. Loading `https://accounts.google.com/gsi/client` requires an internet connection; if it fails to load (offline, blocked, etc.) the button shows a message instead of erroring, and every other feature is unaffected.
+Setup note: this requires a one-time Google Cloud project/OAuth Client ID setup by whoever deploys this app — see **[GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)** for the full walkthrough. Loading `https://accounts.google.com/gsi/client` requires an internet connection; if it fails to load (offline, blocked, etc.) the button shows a message instead of erroring, and every other feature is unaffected.
 
 ## Quiz mode
 
