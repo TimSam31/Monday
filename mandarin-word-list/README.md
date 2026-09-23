@@ -41,6 +41,17 @@ If you paste Hanzi with no pinyin of your own, the Pinyin field is best-effort a
 
 Only Hanzi is required to save a phrase.
 
+### Live reference while building a phrase
+
+As soon as there's any hanzi in the phrase (typed via candidates or pasted), two read-only rows appear below the input, showing what's recognized *within* the phrase so far as substrings — richer than the Tags preview below, which only lists meaning tags:
+
+- **From your vocabulary** — your own saved words found inside the phrase, each shown as a small hanzi/pinyin/meaning chip.
+- **Dictionary reference (CC-CEDICT)** — the same, but against the bundled [CC-CEDICT](#dictionary-reference-cc-cedict) dictionary (lazy-loaded on first use, same as the Search panel), so you can spot valid dictionary words in the phrase even before you've saved them yourself.
+
+Both rows are capped at 5 chips (longest match first), with a **Show N more** chip that expands the rest — a long sentence can easily contain more than 5 recognized chunks, so this can wrap into several rows.
+
+**Clear** (next to **Add Phrase**) resets just the hanzi side of the form — the phrase input, the pinyin field, any in-progress candidates, and these two reference rows — without touching whatever you've already typed in Meaning.
+
 ## Search
 
 One search box, matching only your own saved **Words** — by hanzi, pinyin, or any meaning tag (never the bundled candidate reference set used for the candidate picker). Phrases never appear as their own search result; they only ever show up nested under whichever word matched.

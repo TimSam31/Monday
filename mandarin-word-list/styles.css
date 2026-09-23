@@ -630,6 +630,71 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
   color: var(--muted);
 }
 
+/* ---- phrase form: live reference rows (known vocabulary + CC-CEDICT) ---- */
+
+.phrase-reference {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+/* An explicit display:flex above would otherwise outrank the browser's
+   default [hidden]{display:none} (author styles beat user-agent styles
+   regardless of specificity) -- this restores it, scoped to this element. */
+.phrase-reference[hidden] {
+  display: none;
+}
+
+.phrase-reference-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.phrase-reference-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.phrase-reference-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ref-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 2.6rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.ref-chip .chip-hanzi {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.ref-chip .chip-pinyin {
+  font-size: 0.65rem;
+  color: var(--accent);
+}
+
+.ref-chip .chip-def {
+  font-size: 0.6rem;
+  color: var(--muted);
+  max-width: 6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- Quiz mode ---- */
 
 .quiz-controls {

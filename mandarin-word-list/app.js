@@ -1167,6 +1167,135 @@
     phraseCandidatesPanel.innerHTML = "";
   }
 
+  // ---- live reference while building a phrase: known vocabulary + CC-CEDICT ----
+  //
+  // Two read-only rows below the phrase input showing which of your own
+  // saved words, and which CC-CEDICT entries, are found as substrings of
+  // the hanzi built so far -- separate from (and richer than) the derived
+  // Tags preview, which only lists the meaning tags themselves.
+
+  var phraseReferenceEl = document.getElementById("phrase-reference");
+  var phraseVocabChipsEl = document.getElementById("phrase-vocab-chips");
+  var phraseCedictChipsEl = document.getElementById("phrase-cedict-chips");
+  var PHRASE_REFERENCE_CAP = 5;
+  var phraseVocabExpanded = false;
+  var phraseCedictExpanded = false;
+
+  function computePhraseVocabMatches(phraseHanzi) {
+    return matchWordsInPhrase(phraseHanzi, entries).slice().sort(function (a, b) {
+      return b.hanzi.length - a.hanzi.length || new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  }
+
+  function computePhraseCedictMatches(phraseHanzi) {
+    if (!cedictData) return [];
+    return cedictData
+      .filter(function (entry) { return phraseHanzi.indexOf(entry[1]) !== -1; })
+      .sort(function (a, b) { return b[1].length - a[1].length; });
+  }
+
+  function buildRefChip(hanzi, pinyin, def) {
+    var chip = document.createElement("div");
+    chip.className = "ref-chip";
+    if (def) chip.title = def;
+
+    var hanziEl = document.createElement("span");
+    hanziEl.className = "chip-hanzi";
+    hanziEl.textContent = hanzi;
+    chip.appendChild(hanziEl);
+
+    var pinyinEl = document.createElement("span");
+    pinyinEl.className = "chip-pinyin";
+    pinyinEl.textContent = pinyin;
+    chip.appendChild(pinyinEl);
+
+    if (def) {
+      var defEl = document.createElement("span");
+      defEl.className = "chip-def";
+      defEl.textContent = def;
+      chip.appendChild(defEl);
+    }
+
+    return chip;
+  }
+
+  // Renders items as chips into container, capped with a "Show N more"
+  // chip-row button (wraps alongside the chips) until expanded is true.
+  function renderChipRow(container, items, expanded, buildChip, onExpand) {
+    container.innerHTML = "";
+    if (!items.length) {
+      var none = document.createElement("span");
+      none.className = "hint";
+      none.textContent = "No matches yet.";
+      container.appendChild(none);
+      return;
+    }
+
+    var visible = expanded ? items : items.slice(0, PHRASE_REFERENCE_CAP);
+    visible.forEach(function (item) { container.appendChild(buildChip(item)); });
+
+    if (!expanded && items.length > PHRASE_REFERENCE_CAP) {
+      var remaining = items.length - PHRASE_REFERENCE_CAP;
+      var moreBtn = document.createElement("button");
+      moreBtn.type = "button";
+      moreBtn.className = "tiny-btn secondary-btn";
+      moreBtn.textContent = "Show " + remaining + " more";
+      moreBtn.addEventListener("click", onExpand);
+      container.appendChild(moreBtn);
+    }
+  }
+
+  function renderPhraseVocabRow(hanzi) {
+    renderChipRow(phraseVocabChipsEl, computePhraseVocabMatches(hanzi), phraseVocabExpanded, function (word) {
+      return buildRefChip(word.hanzi, word.pinyin, word.meaning.join(", "));
+    }, function () {
+      phraseVocabExpanded = true;
+      renderPhraseVocabRow(hanzi);
+    });
+  }
+
+  function renderPhraseCedictRow(hanzi) {
+    if (!cedictData) {
+      phraseCedictChipsEl.innerHTML = "";
+      var loading = document.createElement("span");
+      loading.className = "hint";
+      loading.textContent = "Loading dictionary reference…";
+      phraseCedictChipsEl.appendChild(loading);
+
+      loadCedict().then(function () {
+        if (getPhraseFinalHanzi() === hanzi) renderPhraseCedictRow(hanzi);
+      }).catch(function () {
+        if (getPhraseFinalHanzi() !== hanzi) return;
+        phraseCedictChipsEl.innerHTML = "";
+        var err = document.createElement("span");
+        err.className = "hint";
+        err.textContent = "Couldn't load the dictionary reference (offline or blocked).";
+        phraseCedictChipsEl.appendChild(err);
+      });
+      return;
+    }
+
+    renderChipRow(phraseCedictChipsEl, computePhraseCedictMatches(hanzi), phraseCedictExpanded, function (entry) {
+      return buildRefChip(entry[1], cedictPinyinToDisplay(entry[2]), entry[3].join("; "));
+    }, function () {
+      phraseCedictExpanded = true;
+      renderPhraseCedictRow(hanzi);
+    });
+  }
+
+  function renderPhraseReference() {
+    var hanzi = getPhraseFinalHanzi();
+    if (!hanzi) {
+      phraseReferenceEl.hidden = true;
+      phraseVocabChipsEl.innerHTML = "";
+      phraseCedictChipsEl.innerHTML = "";
+      return;
+    }
+    phraseReferenceEl.hidden = false;
+    renderPhraseVocabRow(hanzi);
+    renderPhraseCedictRow(hanzi);
+  }
+
   function renderPhraseCandidates() {
     clearPhraseCandidates();
     var token = lastSyllableToken(phraseInput);
@@ -1202,6 +1331,9 @@
         phrasePinyinInput.value = convertPinyin(phraseInput.value);
         updatePhrasePreview();
         updatePhraseTagsPreview();
+        phraseVocabExpanded = false;
+        phraseCedictExpanded = false;
+        renderPhraseReference();
         clearPhraseCandidates();
         phraseInput.focus();
       });
@@ -1220,6 +1352,9 @@
     }
     updatePhrasePreview();
     updatePhraseTagsPreview();
+    phraseVocabExpanded = false;
+    phraseCedictExpanded = false;
+    renderPhraseReference();
   });
 
   phraseForm.addEventListener("submit", function (event) {
@@ -1253,6 +1388,23 @@
     clearPhraseCandidates();
     updatePhrasePreview();
     updatePhraseTagsPreview();
+    phraseVocabExpanded = false;
+    phraseCedictExpanded = false;
+    renderPhraseReference();
+    phraseInput.focus();
+  });
+
+  var phraseClearBtn = document.getElementById("phrase-clear-btn");
+  phraseClearBtn.addEventListener("click", function () {
+    phraseInput.value = "";
+    phraseHanziBuffer = "";
+    phrasePinyinInput.value = "";
+    clearPhraseCandidates();
+    phraseVocabExpanded = false;
+    phraseCedictExpanded = false;
+    updatePhrasePreview();
+    updatePhraseTagsPreview();
+    renderPhraseReference();
     phraseInput.focus();
   });
 

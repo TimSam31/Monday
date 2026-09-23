@@ -62,6 +62,17 @@
             <input type="text" id="phrase-input" placeholder="e.g. wo3 ai4 ni3 &mdash; or paste 我爱你" autocomplete="off">
             <div class="preview" id="phrase-hanzi-preview" aria-live="polite">&nbsp;</div>
             <div class="candidates" id="phrase-candidates-panel" aria-live="polite"></div>
+
+            <div class="phrase-reference" id="phrase-reference" aria-live="polite" hidden>
+              <div class="phrase-reference-row">
+                <div class="phrase-reference-label">From your vocabulary</div>
+                <div class="phrase-reference-chips" id="phrase-vocab-chips"></div>
+              </div>
+              <div class="phrase-reference-row">
+                <div class="phrase-reference-label">Dictionary reference (CC-CEDICT)</div>
+                <div class="phrase-reference-chips" id="phrase-cedict-chips"></div>
+              </div>
+            </div>
           </div>
 
           <div class="field">
@@ -80,6 +91,7 @@
           </div>
 
           <button type="submit">Add Phrase</button>
+          <button type="button" id="phrase-clear-btn" class="secondary-btn">Clear</button>
           <span id="phrase-form-error" class="error" role="alert"></span>
         </form>
       </div>
