@@ -3,6 +3,7 @@
 
   var STORAGE_KEY = "mandarinWordList.entries";
   var PHRASES_STORAGE_KEY = "mandarinWordList.phrases";
+  var TRIVIA_STORAGE_KEY = "mandarinWordList.trivia";
   var CJK_RE = /[一-鿿]/;
 
   var TONE_MARKS = {
@@ -226,6 +227,42 @@
   }
 
   var phrases = loadPhrases();
+
+  // ---- trivia storage ----
+  //
+  // A trivia article is free-text bound to exactly one word or phrase
+  // (entryType + entryId). The body may contain inline phrase references
+  // as literal "{{phrase:<id>}}" tokens, resolved at render time -- never
+  // resolved/expanded in storage, so a phrase edit or delete is instantly
+  // reflected wherever it's mentioned, with nothing to keep in sync.
+  function normalizeTrivia(t) {
+    return {
+      id: t.id || makeId(),
+      entryType: t.entryType === "phrase" ? "phrase" : "word",
+      entryId: t.entryId || "",
+      body: typeof t.body === "string" ? t.body : "",
+      createdAt: t.createdAt || new Date().toISOString(),
+      updatedAt: t.updatedAt || t.createdAt || new Date().toISOString()
+    };
+  }
+
+  function loadTrivia() {
+    try {
+      var raw = localStorage.getItem(TRIVIA_STORAGE_KEY);
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed)
+        ? parsed.map(normalizeTrivia).filter(function (t) { return t.entryId && t.body.trim(); })
+        : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveTrivia(trivia) {
+    localStorage.setItem(TRIVIA_STORAGE_KEY, JSON.stringify(trivia));
+  }
+
+  var trivia = loadTrivia();
 
   // ---- pinyin candidate data + reverse lookup ----
 
@@ -632,6 +669,8 @@
       var hanziTd = document.createElement("td");
       hanziTd.className = "hanzi";
       hanziTd.textContent = entry.hanzi;
+      var wordBadge = buildTriviaBadge("word", entry.id);
+      if (wordBadge) hanziTd.appendChild(wordBadge);
 
       var pinyinTd = document.createElement("td");
       pinyinTd.className = "pinyin";
@@ -669,6 +708,7 @@
         deleteBtn.setAttribute("aria-label", "Delete entry " + entry.hanzi);
         deleteBtn.addEventListener("click", function () {
           entries = entries.filter(function (e) { return e.id !== entry.id; });
+          trivia = trivia.filter(function (t) { return !(t.entryType === "word" && t.entryId === entry.id); });
           persistEntries();
           renderAll();
         });
@@ -738,6 +778,8 @@
       var hanziTd = document.createElement("td");
       hanziTd.className = "hanzi";
       hanziTd.textContent = phrase.hanzi;
+      var phraseBadge = buildTriviaBadge("phrase", phrase.id);
+      if (phraseBadge) hanziTd.appendChild(phraseBadge);
 
       var pinyinTd = document.createElement("td");
       pinyinTd.className = "pinyin";
@@ -779,6 +821,7 @@
         deleteBtn.setAttribute("aria-label", "Delete phrase " + phrase.hanzi);
         deleteBtn.addEventListener("click", function () {
           phrases = phrases.filter(function (p) { return p.id !== phrase.id; });
+          trivia = trivia.filter(function (t) { return !(t.entryType === "phrase" && t.entryId === phrase.id); });
           persistEntries();
           renderAll();
         });
@@ -1447,7 +1490,7 @@
     return tagsEl;
   }
 
-  function buildHeadword(kindLabel, hanzi, pinyin) {
+  function buildHeadword(kindLabel, hanzi, pinyin, badge) {
     var head = document.createElement("div");
     head.className = "rc-headword";
     var kind = document.createElement("div");
@@ -1456,6 +1499,7 @@
     var hanziEl = document.createElement("div");
     hanziEl.className = "rc-hanzi";
     hanziEl.textContent = hanzi;
+    if (badge) hanziEl.appendChild(badge);
     var pinyinEl = document.createElement("div");
     pinyinEl.className = "rc-pinyin";
     pinyinEl.textContent = pinyin;
@@ -1483,6 +1527,8 @@
         var line = document.createElement("div");
         line.className = "rc-phrase-hanzi";
         line.textContent = item.phrase.hanzi;
+        var lineBadge = buildTriviaBadge("phrase", item.phrase.id);
+        if (lineBadge) line.appendChild(lineBadge);
         var pinyinLine = document.createElement("div");
         pinyinLine.className = "rc-phrase-pinyin";
         pinyinLine.textContent = item.phrase.pinyin;
@@ -1507,7 +1553,7 @@
       }
     }
 
-    card.appendChild(buildHeadword("Word", word.hanzi, word.pinyin));
+    card.appendChild(buildHeadword("Word", word.hanzi, word.pinyin, buildTriviaBadge("word", word.id)));
 
     if (editingWordId === word.id) {
       var editingTagsEl = document.createElement("div");
@@ -1544,6 +1590,8 @@
     var hanziEl = document.createElement("div");
     hanziEl.className = "rc-phrase-hanzi";
     hanziEl.textContent = phrase.hanzi;
+    var detailBadge = buildTriviaBadge("phrase", phrase.id);
+    if (detailBadge) hanziEl.appendChild(detailBadge);
     item.appendChild(hanziEl);
 
     var pinyinEl = document.createElement("div");
@@ -1856,6 +1904,7 @@
     renderPhraseTable();
     renderSearch();
     if (quizSectionEl && !quizSectionEl.hidden) renderQuizCard();
+    if (triviaSectionEl && !triviaSectionEl.hidden) renderTriviaMode();
   }
 
   // ---- word key / merge (dedup by hanzi + pinyin + meaning set) ----
@@ -1882,7 +1931,7 @@
       existingKeys[key] = true;
 
       entries.push({
-        id: makeId(),
+        id: raw.id || makeId(),
         hanzi: hanzi,
         pinyin: pinyin,
         meaning: meaning,
@@ -1917,6 +1966,47 @@
     return added;
   }
 
+  // ---- trivia merge (dedup by which word/phrase it's bound to; newest updatedAt wins) ----
+  //
+  // At most one trivia article per (entryType, entryId). Preserving
+  // incoming ids above for words/phrases (not just phrases as before) is
+  // what keeps a trivia's entryId binding valid across devices -- a word
+  // merged onto a fresh device now keeps the same id it had on the device
+  // that wrote the trivia about it.
+
+  function mergeTrivia(newOnes) {
+    var byKey = {};
+    trivia.forEach(function (t) { byKey[t.entryType + ":" + t.entryId] = t; });
+
+    var added = 0;
+    (newOnes || []).forEach(function (raw) {
+      var entryType = raw.entryType === "phrase" ? "phrase" : "word";
+      var entryId = (raw.entryId || "").trim();
+      var body = typeof raw.body === "string" ? raw.body : "";
+      if (!entryId || !body.trim()) return;
+
+      var key = entryType + ":" + entryId;
+      var existing = byKey[key];
+      if (!existing) {
+        var fresh = {
+          id: raw.id || makeId(),
+          entryType: entryType,
+          entryId: entryId,
+          body: body,
+          createdAt: raw.createdAt || new Date().toISOString(),
+          updatedAt: raw.updatedAt || raw.createdAt || new Date().toISOString()
+        };
+        trivia.push(fresh);
+        byKey[key] = fresh;
+        added++;
+      } else if (new Date(raw.updatedAt || 0) > new Date(existing.updatedAt || 0)) {
+        existing.body = body;
+        existing.updatedAt = raw.updatedAt || new Date().toISOString();
+      }
+    });
+    return added;
+  }
+
   // ---- JSON export/import (words + phrases together) ----
 
   var ioStatus = document.getElementById("io-status");
@@ -1924,7 +2014,7 @@
   document.getElementById("export-json-btn").addEventListener("click", function () {
     download(
       "mandarin-word-list.json",
-      JSON.stringify({ words: entries, phrases: phrases }, null, 2),
+      JSON.stringify({ words: entries, phrases: phrases, trivia: trivia }, null, 2),
       "application/json"
     );
   });
@@ -1937,24 +2027,28 @@
     reader.onload = function () {
       try {
         var parsed = JSON.parse(String(reader.result));
-        var wordsIn, phrasesIn;
+        var wordsIn, phrasesIn, triviaIn;
         if (Array.isArray(parsed)) {
           wordsIn = parsed; // legacy words-only export
           phrasesIn = [];
+          triviaIn = [];
         } else if (parsed && typeof parsed === "object") {
           wordsIn = Array.isArray(parsed.words) ? parsed.words : [];
           phrasesIn = Array.isArray(parsed.phrases) ? parsed.phrases : [];
+          triviaIn = Array.isArray(parsed.trivia) ? parsed.trivia : [];
         } else {
           throw new Error("Unrecognized JSON shape.");
         }
 
         var addedWords = mergeEntries(wordsIn);
         var addedPhrases = mergePhrases(phrasesIn);
+        var addedTrivia = mergeTrivia(triviaIn);
         persistEntries();
         renderAll();
         ioStatus.textContent =
           "Imported " + addedWords + " word" + (addedWords === 1 ? "" : "s") +
-          " and " + addedPhrases + " phrase" + (addedPhrases === 1 ? "" : "s") + ".";
+          ", " + addedPhrases + " phrase" + (addedPhrases === 1 ? "" : "s") +
+          ", and " + addedTrivia + " trivia article" + (addedTrivia === 1 ? "" : "s") + ".";
       } catch (err) {
         ioStatus.textContent = "Import failed: " + err.message;
       }
@@ -2081,16 +2175,17 @@
   }
 
   function snapshotPayload() {
-    return JSON.stringify({ words: entries, phrases: phrases }, null, 2);
+    return JSON.stringify({ words: entries, phrases: phrases, trivia: trivia }, null, 2);
   }
 
   function parseSnapshotPayload(text) {
-    if (!text.trim()) return { words: [], phrases: [] };
+    if (!text.trim()) return { words: [], phrases: [], trivia: [] };
     var parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) return { words: parsed, phrases: [] };
+    if (Array.isArray(parsed)) return { words: parsed, phrases: [], trivia: [] };
     return {
       words: Array.isArray(parsed.words) ? parsed.words : [],
-      phrases: Array.isArray(parsed.phrases) ? parsed.phrases : []
+      phrases: Array.isArray(parsed.phrases) ? parsed.phrases : [],
+      trivia: Array.isArray(parsed.trivia) ? parsed.trivia : []
     };
   }
 
@@ -2135,9 +2230,11 @@
         }
         var addedWords = mergeEntries(data.words);
         var addedPhrases = mergePhrases(data.phrases);
-        if (addedWords > 0 || addedPhrases > 0) {
+        var addedTrivia = mergeTrivia(data.trivia);
+        if (addedWords > 0 || addedPhrases > 0 || addedTrivia > 0) {
           saveEntries(entries);
           savePhrases(phrases);
+          saveTrivia(trivia);
           renderAll();
         }
         return writeSnapshotToOpfs();
@@ -2243,6 +2340,7 @@
   function persistEntries() {
     saveEntries(entries);
     savePhrases(phrases);
+    saveTrivia(trivia);
     writeSnapshotToOpfs();
     writeSnapshotToFolder();
     writeDriveFile();
@@ -2266,22 +2364,26 @@
     return readFolderData(dirHandle)
       .then(function (data) {
         if (data === null) {
-          return writeSnapshotToFolder().then(function () { return { words: 0, phrases: 0 }; });
+          return writeSnapshotToFolder().then(function () { return { words: 0, phrases: 0, trivia: 0 }; });
         }
         var addedWords = mergeEntries(data.words);
         var addedPhrases = mergePhrases(data.phrases);
+        var addedTrivia = mergeTrivia(data.trivia);
         saveEntries(entries);
         savePhrases(phrases);
+        saveTrivia(trivia);
         renderAll();
-        return writeSnapshotToFolder().then(function () { return { words: addedWords, phrases: addedPhrases }; });
+        return writeSnapshotToFolder().then(function () { return { words: addedWords, phrases: addedPhrases, trivia: addedTrivia }; });
       })
       .then(function (added) {
         setConnectedUi(dirHandle);
-        if (added.words > 0 || added.phrases > 0) {
+        if (added.words > 0 || added.phrases > 0 || added.trivia > 0) {
+          var parts = [];
+          if (added.words > 0) parts.push(added.words + " word" + (added.words === 1 ? "" : "s"));
+          if (added.phrases > 0) parts.push(added.phrases + " phrase" + (added.phrases === 1 ? "" : "s"));
+          if (added.trivia > 0) parts.push(added.trivia + " trivia article" + (added.trivia === 1 ? "" : "s"));
           setFolderStatus(
-            "Connected: “" + dirHandle.name + "” (autosaving) — merged " +
-            added.words + " word" + (added.words === 1 ? "" : "s") + " and " +
-            added.phrases + " phrase" + (added.phrases === 1 ? "" : "s") + " from folder."
+            "Connected: “" + dirHandle.name + "” (autosaving) — merged " + parts.join(", ") + " from folder."
           );
         }
       })
@@ -2515,26 +2617,30 @@
         if (fileId) {
           driveFileId = fileId;
           return readDriveFile(fileId).then(function (data) {
-            if (!data) return { words: 0, phrases: 0 };
+            if (!data) return { words: 0, phrases: 0, trivia: 0 };
             var addedWords = mergeEntries(data.words);
             var addedPhrases = mergePhrases(data.phrases);
+            var addedTrivia = mergeTrivia(data.trivia);
             saveEntries(entries);
             savePhrases(phrases);
+            saveTrivia(trivia);
             renderAll();
-            return writeDriveFile().then(function () { return { words: addedWords, phrases: addedPhrases }; });
+            return writeDriveFile().then(function () { return { words: addedWords, phrases: addedPhrases, trivia: addedTrivia }; });
           });
         }
         return createDriveFile(driveFolderId).then(function (newFileId) {
           driveFileId = newFileId;
-          return { words: 0, phrases: 0 };
+          return { words: 0, phrases: 0, trivia: 0 };
         });
       })
       .then(function (added) {
         var msg = "Connected to Google Drive (in “" + DRIVE_FOLDER_NAME + "” folder, autosaving)";
-        if (added.words > 0 || added.phrases > 0) {
-          msg +=
-            " — merged " + added.words + " word" + (added.words === 1 ? "" : "s") +
-            " and " + added.phrases + " phrase" + (added.phrases === 1 ? "" : "s") + " from Drive.";
+        if (added.words > 0 || added.phrases > 0 || added.trivia > 0) {
+          var parts = [];
+          if (added.words > 0) parts.push(added.words + " word" + (added.words === 1 ? "" : "s"));
+          if (added.phrases > 0) parts.push(added.phrases + " phrase" + (added.phrases === 1 ? "" : "s"));
+          if (added.trivia > 0) parts.push(added.trivia + " trivia article" + (added.trivia === 1 ? "" : "s"));
+          msg += " — merged " + parts.join(", ") + " from Drive.";
         }
         setDriveConnectedUi(msg);
       })
@@ -2580,24 +2686,26 @@
 
   // ---- app mode: Vocabulary <-> Quiz ----
 
-  var modeVocabBtn = document.getElementById("mode-tab-vocab");
-  var modeQuizBtn = document.getElementById("mode-tab-quiz");
-  var vocabModeEls = document.querySelectorAll(".mode-vocab");
-  var quizModeEls = document.querySelectorAll(".mode-quiz");
+  var APP_MODES = [
+    { mode: "vocab", btn: document.getElementById("mode-tab-vocab"), els: document.querySelectorAll(".mode-vocab") },
+    { mode: "quiz", btn: document.getElementById("mode-tab-quiz"), els: document.querySelectorAll(".mode-quiz") },
+    { mode: "trivia", btn: document.getElementById("mode-tab-trivia"), els: document.querySelectorAll(".mode-trivia") }
+  ];
 
   function setAppMode(mode) {
-    var isQuiz = mode === "quiz";
-    vocabModeEls.forEach(function (el) { el.hidden = isQuiz; });
-    quizModeEls.forEach(function (el) { el.hidden = !isQuiz; });
-    modeVocabBtn.classList.toggle("is-active", !isQuiz);
-    modeVocabBtn.setAttribute("aria-selected", String(!isQuiz));
-    modeQuizBtn.classList.toggle("is-active", isQuiz);
-    modeQuizBtn.setAttribute("aria-selected", String(isQuiz));
-    if (isQuiz) renderQuizCard();
+    APP_MODES.forEach(function (m) {
+      var isActive = m.mode === mode;
+      m.els.forEach(function (el) { el.hidden = !isActive; });
+      m.btn.classList.toggle("is-active", isActive);
+      m.btn.setAttribute("aria-selected", String(isActive));
+    });
+    if (mode === "quiz") renderQuizCard();
+    if (mode === "trivia") renderTriviaMode();
   }
 
-  modeVocabBtn.addEventListener("click", function () { setAppMode("vocab"); });
-  modeQuizBtn.addEventListener("click", function () { setAppMode("quiz"); });
+  APP_MODES.forEach(function (m) {
+    m.btn.addEventListener("click", function () { setAppMode(m.mode); });
+  });
 
   // ---- Quiz mode ----
   //
@@ -2765,6 +2873,560 @@
       }
       renderQuizCard();
     });
+  });
+
+  // ---- Trivia mode ----
+  //
+  // A trivia article is free-text bound to exactly one word or phrase.
+  // Three sub-views inside the Trivia section: a list of everything with
+  // trivia, an editor (add/edit), and a full-article reader -- the same
+  // "list vs. detail" pattern already used for the per-word phrase list in
+  // Search. Phrase mentions inside a trivia body are stored as literal
+  // "{{phrase:<id>}}" tokens and only resolved into rich chips at render
+  // time, so editing/deleting a phrase is reflected everywhere instantly.
+
+  function recencyDesc(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); }
+
+  function getTriviaFor(entryType, entryId) {
+    return trivia.find(function (t) { return t.entryType === entryType && t.entryId === entryId; }) || null;
+  }
+
+  function resolveTriviaSubject(ref) {
+    if (ref.entryType === "word") {
+      var w = entries.find(function (e) { return e.id === ref.entryId; });
+      return w ? { kindLabel: "Word", hanzi: w.hanzi, pinyin: w.pinyin } : null;
+    }
+    var p = phrases.find(function (ph) { return ph.id === ref.entryId; });
+    return p ? { kindLabel: "Phrase", hanzi: p.hanzi, pinyin: p.pinyin } : null;
+  }
+
+  var TRIVIA_TOKEN_RE = /\{\{phrase:([^}]+)\}\}/g;
+
+  function triviaBodyToPlainText(body) {
+    return body.replace(TRIVIA_TOKEN_RE, function (_, phraseId) {
+      var phrase = phrases.find(function (p) { return p.id === phraseId; });
+      return phrase ? phrase.hanzi : "[deleted phrase]";
+    });
+  }
+
+  function triviaSnippet(body, maxChars) {
+    var plain = triviaBodyToPlainText(body).replace(/\s+/g, " ").trim();
+    if (plain.length <= maxChars) return plain;
+    return plain.slice(0, maxChars).trim() + "…";
+  }
+
+  function renderTriviaBodyInto(container, body) {
+    container.innerHTML = "";
+    body.split(/\n{2,}/).forEach(function (para) {
+      if (!para.trim()) return;
+      var p = document.createElement("p");
+      p.className = "trivia-paragraph";
+
+      var lastIndex = 0;
+      var re = new RegExp(TRIVIA_TOKEN_RE.source, "g");
+      var match;
+      while ((match = re.exec(para))) {
+        if (match.index > lastIndex) {
+          p.appendChild(document.createTextNode(para.slice(lastIndex, match.index)));
+        }
+        var phrase = phrases.find(function (ph) { return ph.id === match[1]; });
+        var mention = document.createElement("span");
+        mention.className = "trivia-phrase-mention";
+        if (phrase) {
+          mention.textContent = phrase.hanzi;
+          mention.title = phrase.pinyin + (phrase.meaning ? " — " + phrase.meaning : "");
+        } else {
+          mention.classList.add("trivia-phrase-missing");
+          mention.textContent = "[deleted phrase]";
+        }
+        p.appendChild(mention);
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < para.length) p.appendChild(document.createTextNode(para.slice(lastIndex)));
+
+      container.appendChild(p);
+    });
+  }
+
+  // Words relevant to an entry's binding, used both to rank the phrase
+  // insert-picker's search results and to build its default suggestions:
+  // for a word binding, just that word; for a phrase binding, every word
+  // matched inside that phrase (its own derived-tags vocabulary).
+  function boundWordsFor(entryType, entryId) {
+    if (entryType === "word") {
+      var w = entries.find(function (e) { return e.id === entryId; });
+      return w ? [w] : [];
+    }
+    var p = phrases.find(function (ph) { return ph.id === entryId; });
+    return p ? derivePhraseTags(p.hanzi, entries).matchedWords : [];
+  }
+
+  function defaultTriviaInsertSuggestions(boundWords, excludeId) {
+    if (boundWords.length) {
+      var containing = phrases.filter(function (p) {
+        return p.id !== excludeId && boundWords.some(function (w) { return p.hanzi.indexOf(w.hanzi) !== -1; });
+      });
+      if (containing.length) return containing.slice().sort(recencyDesc);
+    }
+    return phrases.filter(function (p) { return p.id !== excludeId; }).sort(recencyDesc).slice(0, 20);
+  }
+
+  function computeTriviaInsertCandidates(query, entryType, entryId) {
+    var boundWords = boundWordsFor(entryType, entryId);
+    var excludeId = entryType === "phrase" ? entryId : null;
+    var q = query.trim();
+    if (!q) return defaultTriviaInsertSuggestions(boundWords, excludeId);
+
+    var isHanziQuery = containsCjk(q);
+    var qPlain = stripDiacritics(q.toLowerCase());
+    var matches = phrases.filter(function (p) {
+      if (p.id === excludeId) return false;
+      return isHanziQuery
+        ? p.hanzi.indexOf(q) !== -1
+        : stripDiacritics(p.pinyin.toLowerCase()).indexOf(qPlain) !== -1;
+    });
+
+    matches.sort(function (a, b) {
+      var aBoost = boundWords.some(function (w) { return a.hanzi.indexOf(w.hanzi) !== -1; });
+      var bBoost = boundWords.some(function (w) { return b.hanzi.indexOf(w.hanzi) !== -1; });
+      if (aBoost !== bBoost) return aBoost ? -1 : 1;
+      return recencyDesc(a, b);
+    });
+    return matches;
+  }
+
+  function computeBindCandidates(type, query) {
+    var q = query.trim().toLowerCase();
+    var qPlain = stripDiacritics(q);
+    if (type === "word") {
+      if (!q) return entries.slice().sort(recencyDesc).slice(0, 20);
+      return entries.filter(function (w) {
+        return w.hanzi.toLowerCase().indexOf(q) !== -1 ||
+          stripDiacritics(w.pinyin.toLowerCase()).indexOf(qPlain) !== -1 ||
+          w.meaning.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; });
+      });
+    }
+    if (!q) return phrases.slice().sort(recencyDesc).slice(0, 20);
+    return phrases.filter(function (p) {
+      var info = derivePhraseTags(p.hanzi, entries);
+      return p.hanzi.toLowerCase().indexOf(q) !== -1 ||
+        (p.meaning || "").toLowerCase().indexOf(q) !== -1 ||
+        info.tags.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; });
+    });
+  }
+
+  function insertAtCursor(textarea, text) {
+    var start = textarea.selectionStart != null ? textarea.selectionStart : textarea.value.length;
+    var end = textarea.selectionEnd != null ? textarea.selectionEnd : textarea.value.length;
+    var value = textarea.value;
+    textarea.value = value.slice(0, start) + text + value.slice(end);
+    var newPos = start + text.length;
+    textarea.focus();
+    textarea.setSelectionRange(newPos, newPos);
+  }
+
+  // A small badge shown next to a word/phrase that has trivia, anywhere
+  // one is displayed (browse tables, search cards, phrase detail list).
+  // Hovering/focusing reveals a short preview with a button that jumps
+  // straight to that trivia's full article (switching to Trivia mode).
+  function buildTriviaBadge(entryType, entryId) {
+    var t = getTriviaFor(entryType, entryId);
+    if (!t) return null;
+
+    var wrap = document.createElement("span");
+    wrap.className = "trivia-badge-wrap";
+
+    var badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = "trivia-badge";
+    badge.textContent = "Trivia";
+    badge.addEventListener("click", function () { openTriviaFullView(entryType, entryId); });
+
+    var popover = document.createElement("div");
+    popover.className = "trivia-popover";
+    var preview = document.createElement("p");
+    preview.textContent = triviaSnippet(t.body, 160);
+    var viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.className = "secondary-btn tiny-btn";
+    viewBtn.textContent = "View full trivia";
+    viewBtn.addEventListener("click", function () { openTriviaFullView(entryType, entryId); });
+    popover.appendChild(preview);
+    popover.appendChild(viewBtn);
+
+    wrap.appendChild(badge);
+    wrap.appendChild(popover);
+    return wrap;
+  }
+
+  // ---- element refs ----
+
+  var triviaSectionEl = document.getElementById("trivia-section");
+  var triviaListViewEl = document.getElementById("trivia-list-view");
+  var triviaEditorViewEl = document.getElementById("trivia-editor-view");
+  var triviaFullViewEl = document.getElementById("trivia-full-view");
+
+  var triviaCountLabel = document.getElementById("trivia-count-label");
+  var triviaAddBtn = document.getElementById("trivia-add-btn");
+  var triviaListItemsEl = document.getElementById("trivia-list-items");
+  var triviaEmptyState = document.getElementById("trivia-empty-state");
+  var triviaPaginationEl = document.getElementById("trivia-pagination");
+
+  var triviaEditorBackBtn = document.getElementById("trivia-editor-back-btn");
+  var triviaEditorHeading = document.getElementById("trivia-editor-heading");
+  var triviaBindPickerEl = document.getElementById("trivia-bind-picker");
+  var triviaBindTabWordBtn = document.getElementById("trivia-bind-tab-word");
+  var triviaBindTabPhraseBtn = document.getElementById("trivia-bind-tab-phrase");
+  var triviaBindSearchInput = document.getElementById("trivia-bind-search");
+  var triviaBindResultsEl = document.getElementById("trivia-bind-results");
+  var triviaBindChosenEl = document.getElementById("trivia-bind-chosen");
+  var triviaBoundTextEl = document.getElementById("trivia-bound-text");
+  var triviaBindChangeBtn = document.getElementById("trivia-bind-change-btn");
+  var triviaBodyInput = document.getElementById("trivia-body-input");
+  var triviaInsertSearchInput = document.getElementById("trivia-insert-search");
+  var triviaInsertResultsEl = document.getElementById("trivia-insert-results");
+  var triviaSaveBtn = document.getElementById("trivia-save-btn");
+  var triviaCancelBtn = document.getElementById("trivia-cancel-btn");
+  var triviaEditorError = document.getElementById("trivia-editor-error");
+
+  var triviaFullBackBtn = document.getElementById("trivia-full-back-btn");
+  var triviaFullKindEl = document.getElementById("trivia-full-kind");
+  var triviaFullHanziEl = document.getElementById("trivia-full-hanzi");
+  var triviaFullPinyinEl = document.getElementById("trivia-full-pinyin");
+  var triviaFullBodyEl = document.getElementById("trivia-full-body");
+  var triviaFullEditBtn = document.getElementById("trivia-full-edit-btn");
+  var triviaFullDeleteBtn = document.getElementById("trivia-full-delete-btn");
+
+  // ---- state ----
+
+  var triviaView = "list"; // "list" | "editor" | "full"
+  var triviaListPageState = { page: 1, pageSize: 20 };
+  var triviaEditingId = null; // trivia id being edited; null = creating new
+  var triviaBindType = "word"; // which tab is active in the "bind to" picker
+  var triviaBoundEntry = null; // { type, id } once something is chosen
+  var triviaViewingRef = null; // { entryType, entryId } for the full-article view
+
+  function showTriviaView(view) {
+    triviaView = view;
+    triviaListViewEl.hidden = view !== "list";
+    triviaEditorViewEl.hidden = view !== "editor";
+    triviaFullViewEl.hidden = view !== "full";
+  }
+
+  function renderTriviaMode() {
+    if (triviaView === "list") renderTriviaList();
+    else if (triviaView === "full") renderTriviaFullView();
+    // "editor" manages its own sub-renders and is left alone here so an
+    // in-progress edit survives switching away from Trivia mode and back.
+  }
+
+  // ---- list view ----
+
+  function renderTriviaList() {
+    var sorted = trivia.slice().sort(function (a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
+    triviaCountLabel.textContent = trivia.length + (trivia.length === 1 ? " trivia article" : " trivia articles");
+    triviaEmptyState.hidden = trivia.length !== 0;
+
+    var pageItems = paginate(sorted, triviaListPageState);
+    triviaListItemsEl.innerHTML = "";
+
+    pageItems.forEach(function (t) {
+      var subject = resolveTriviaSubject(t);
+      if (!subject) return; // orphaned (shouldn't normally happen; delete cascades)
+
+      var row = document.createElement("div");
+      row.className = "trivia-list-item";
+
+      var head = document.createElement("div");
+      head.className = "tli-headword";
+      var kind = document.createElement("div");
+      kind.className = "rc-kind";
+      kind.textContent = subject.kindLabel;
+      var hanziEl = document.createElement("div");
+      hanziEl.className = "tli-hanzi";
+      hanziEl.textContent = subject.hanzi;
+      var pinyinEl = document.createElement("div");
+      pinyinEl.className = "tli-pinyin";
+      pinyinEl.textContent = subject.pinyin;
+      head.appendChild(kind);
+      head.appendChild(hanziEl);
+      head.appendChild(pinyinEl);
+
+      var snippet = document.createElement("div");
+      snippet.className = "tli-snippet";
+      snippet.textContent = triviaSnippet(t.body, 140);
+
+      var actions = document.createElement("div");
+      actions.className = "tli-actions";
+      var viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "secondary-btn tiny-btn";
+      viewBtn.textContent = "View";
+      viewBtn.addEventListener("click", function () { openTriviaFullView(t.entryType, t.entryId); });
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "secondary-btn tiny-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", function () { openTriviaEditor(t.id); });
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "secondary-btn tiny-btn";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", function () { deleteTrivia(t.id); });
+      actions.appendChild(viewBtn);
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+
+      row.appendChild(head);
+      row.appendChild(snippet);
+      row.appendChild(actions);
+      triviaListItemsEl.appendChild(row);
+    });
+
+    renderPaginationControls(triviaPaginationEl, triviaListPageState, sorted.length, renderTriviaList);
+  }
+
+  function deleteTrivia(id) {
+    trivia = trivia.filter(function (t) { return t.id !== id; });
+    persistEntries();
+    renderAll();
+    triviaViewingRef = null;
+    showTriviaView("list");
+    renderTriviaList();
+  }
+
+  triviaAddBtn.addEventListener("click", function () { openTriviaEditor(null); });
+
+  // ---- full article view ----
+
+  function openTriviaFullView(entryType, entryId) {
+    triviaViewingRef = { entryType: entryType, entryId: entryId };
+    showTriviaView("full");
+    setAppMode("trivia");
+  }
+
+  function renderTriviaFullView() {
+    var ref = triviaViewingRef;
+    var t = ref && trivia.find(function (x) { return x.entryType === ref.entryType && x.entryId === ref.entryId; });
+    var subject = ref && resolveTriviaSubject(ref);
+
+    if (!ref || !t || !subject) {
+      triviaViewingRef = null;
+      showTriviaView("list");
+      renderTriviaList();
+      return;
+    }
+
+    triviaFullKindEl.textContent = subject.kindLabel;
+    triviaFullHanziEl.textContent = subject.hanzi;
+    triviaFullPinyinEl.textContent = subject.pinyin;
+    renderTriviaBodyInto(triviaFullBodyEl, t.body);
+
+    triviaFullEditBtn.onclick = function () { openTriviaEditor(t.id); };
+    triviaFullDeleteBtn.onclick = function () { deleteTrivia(t.id); };
+  }
+
+  triviaFullBackBtn.addEventListener("click", function () {
+    triviaViewingRef = null;
+    showTriviaView("list");
+    renderTriviaList();
+  });
+
+  // ---- editor view (add / edit) ----
+
+  function updateBindTabsUi() {
+    triviaBindTabWordBtn.classList.toggle("is-active", triviaBindType === "word");
+    triviaBindTabWordBtn.setAttribute("aria-selected", String(triviaBindType === "word"));
+    triviaBindTabPhraseBtn.classList.toggle("is-active", triviaBindType === "phrase");
+    triviaBindTabPhraseBtn.setAttribute("aria-selected", String(triviaBindType === "phrase"));
+  }
+
+  function renderBindResults() {
+    var candidates = computeBindCandidates(triviaBindType, triviaBindSearchInput.value);
+    triviaBindResultsEl.innerHTML = "";
+    candidates.slice(0, 20).forEach(function (item) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "candidate-btn";
+
+      var charSpan = document.createElement("span");
+      charSpan.className = "cb-char";
+      charSpan.textContent = item.hanzi;
+      var pinyinSpan = document.createElement("span");
+      pinyinSpan.className = "cb-pinyin";
+      pinyinSpan.textContent = item.pinyin;
+      var defSpan = document.createElement("span");
+      defSpan.className = "cb-def";
+      defSpan.textContent = triviaBindType === "word" ? item.meaning.join(", ") : (item.meaning || "(no meaning yet)");
+
+      btn.appendChild(charSpan);
+      btn.appendChild(pinyinSpan);
+      btn.appendChild(defSpan);
+      btn.addEventListener("click", function () {
+        triviaBoundEntry = { type: triviaBindType, id: item.id };
+        renderBoundDisplay();
+      });
+      triviaBindResultsEl.appendChild(btn);
+    });
+  }
+
+  function renderBoundDisplay() {
+    if (!triviaBoundEntry) {
+      triviaBindChosenEl.hidden = true;
+      triviaBindPickerEl.hidden = false;
+      renderInsertResults();
+      return;
+    }
+    var subject = resolveTriviaSubject({ entryType: triviaBoundEntry.type, entryId: triviaBoundEntry.id });
+    if (!subject) {
+      triviaBoundEntry = null;
+      triviaBindChosenEl.hidden = true;
+      triviaBindPickerEl.hidden = false;
+      renderInsertResults();
+      return;
+    }
+    triviaBoundTextEl.textContent = subject.kindLabel + ": " + subject.hanzi + " (" + subject.pinyin + ")";
+    triviaBindChosenEl.hidden = false;
+    triviaBindPickerEl.hidden = true;
+    triviaBindChangeBtn.hidden = !!triviaEditingId; // locked once editing an existing trivia
+    renderInsertResults();
+  }
+
+  function renderInsertResults() {
+    triviaInsertResultsEl.innerHTML = "";
+    if (!triviaBoundEntry) {
+      var hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = "Choose what this trivia is bound to first.";
+      triviaInsertResultsEl.appendChild(hint);
+      return;
+    }
+
+    var candidates = computeTriviaInsertCandidates(triviaInsertSearchInput.value, triviaBoundEntry.type, triviaBoundEntry.id);
+    if (!candidates.length) {
+      var none = document.createElement("span");
+      none.className = "hint";
+      none.textContent = "No matching phrases.";
+      triviaInsertResultsEl.appendChild(none);
+      return;
+    }
+
+    candidates.slice(0, 10).forEach(function (p) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "candidate-btn";
+      btn.title = "Insert " + p.hanzi + " into the trivia text";
+
+      var charSpan = document.createElement("span");
+      charSpan.className = "cb-char";
+      charSpan.textContent = p.hanzi;
+      var pinyinSpan = document.createElement("span");
+      pinyinSpan.className = "cb-pinyin";
+      pinyinSpan.textContent = p.pinyin;
+      var defSpan = document.createElement("span");
+      defSpan.className = "cb-def";
+      defSpan.textContent = p.meaning || "(no meaning yet)";
+
+      btn.appendChild(charSpan);
+      btn.appendChild(pinyinSpan);
+      btn.appendChild(defSpan);
+      btn.addEventListener("click", function () {
+        insertAtCursor(triviaBodyInput, "{{phrase:" + p.id + "}}");
+      });
+      triviaInsertResultsEl.appendChild(btn);
+    });
+  }
+
+  triviaBindTabWordBtn.addEventListener("click", function () {
+    triviaBindType = "word";
+    updateBindTabsUi();
+    renderBindResults();
+  });
+  triviaBindTabPhraseBtn.addEventListener("click", function () {
+    triviaBindType = "phrase";
+    updateBindTabsUi();
+    renderBindResults();
+  });
+  triviaBindSearchInput.addEventListener("input", renderBindResults);
+  triviaBindChangeBtn.addEventListener("click", function () {
+    triviaBoundEntry = null;
+    triviaBindSearchInput.value = "";
+    renderBindResults();
+    renderBoundDisplay();
+  });
+  triviaInsertSearchInput.addEventListener("input", renderInsertResults);
+
+  function openTriviaEditor(existingId) {
+    triviaEditingId = existingId || null;
+    var existing = triviaEditingId ? trivia.find(function (t) { return t.id === triviaEditingId; }) : null;
+
+    triviaEditorError.textContent = "";
+    triviaEditorHeading.textContent = existing ? "Edit trivia" : "Add trivia";
+
+    triviaBoundEntry = existing ? { type: existing.entryType, id: existing.entryId } : null;
+    triviaBodyInput.value = existing ? existing.body : "";
+    triviaBindType = triviaBoundEntry ? triviaBoundEntry.type : "word";
+    triviaBindSearchInput.value = "";
+
+    updateBindTabsUi();
+    renderBindResults();
+    renderBoundDisplay();
+
+    showTriviaView("editor");
+    setAppMode("trivia");
+  }
+
+  triviaEditorBackBtn.addEventListener("click", function () {
+    showTriviaView("list");
+    renderTriviaList();
+  });
+  triviaCancelBtn.addEventListener("click", function () {
+    showTriviaView("list");
+    renderTriviaList();
+  });
+
+  triviaSaveBtn.addEventListener("click", function () {
+    triviaEditorError.textContent = "";
+    if (!triviaBoundEntry) {
+      triviaEditorError.textContent = "Choose a word or phrase to bind this trivia to.";
+      return;
+    }
+    var body = triviaBodyInput.value.trim();
+    if (!body) {
+      triviaEditorError.textContent = "Trivia text is required.";
+      return;
+    }
+
+    var now = new Date().toISOString();
+    if (triviaEditingId) {
+      var existing = trivia.find(function (t) { return t.id === triviaEditingId; });
+      if (existing) {
+        existing.body = body;
+        existing.updatedAt = now;
+      }
+    } else {
+      // One trivia per (entryType, entryId) -- update instead of a silent
+      // duplicate if one already exists for this target.
+      var already = trivia.find(function (t) { return t.entryType === triviaBoundEntry.type && t.entryId === triviaBoundEntry.id; });
+      if (already) {
+        already.body = body;
+        already.updatedAt = now;
+      } else {
+        trivia.push({
+          id: makeId(),
+          entryType: triviaBoundEntry.type,
+          entryId: triviaBoundEntry.id,
+          body: body,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    }
+
+    persistEntries();
+    renderAll();
+    showTriviaView("list");
+    renderTriviaList();
   });
 
   renderAll();

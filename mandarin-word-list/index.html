@@ -17,6 +17,7 @@
     <div class="mode-tabs" role="tablist" aria-label="App mode">
       <button type="button" class="mode-tab-btn is-active" id="mode-tab-vocab" role="tab" aria-selected="true">Vocabulary</button>
       <button type="button" class="mode-tab-btn" id="mode-tab-quiz" role="tab" aria-selected="false">Quiz</button>
+      <button type="button" class="mode-tab-btn" id="mode-tab-trivia" role="tab" aria-selected="false">Trivia</button>
     </div>
 
     <!-- ============ TOP: INPUT SECTION ============ -->
@@ -249,6 +250,78 @@
       <div class="quiz-actions">
         <button type="button" id="quiz-next-btn">Next word</button>
         <span id="quiz-progress" class="hint"></span>
+      </div>
+    </section>
+
+    <!-- ============ TRIVIA MODE ============ -->
+    <section class="trivia-section mode-trivia" id="trivia-section" hidden aria-labelledby="trivia-heading">
+      <h2 id="trivia-heading">Trivia</h2>
+
+      <!-- ---- list view ---- -->
+      <div id="trivia-list-view">
+        <div class="list-header">
+          <span id="trivia-count-label">0 trivia articles</span>
+          <button type="button" id="trivia-add-btn">+ Add trivia</button>
+        </div>
+        <div id="trivia-list-items" class="trivia-list-items"></div>
+        <p id="trivia-empty-state" class="empty-state" hidden>No trivia yet &mdash; click <strong>+ Add trivia</strong> to write your first one.</p>
+        <div class="pagination" id="trivia-pagination"></div>
+      </div>
+
+      <!-- ---- editor view (add / edit) ---- -->
+      <div id="trivia-editor-view" hidden>
+        <button type="button" class="secondary-btn back-btn" id="trivia-editor-back-btn">&larr; Back to trivia list</button>
+        <h3 class="detail-heading" id="trivia-editor-heading">Add trivia</h3>
+
+        <div id="trivia-bind-picker" class="field">
+          <label>Bind to <span class="hint">(choose a word or phrase this trivia is about)</span></label>
+          <div class="tabs" role="tablist" aria-label="Bind trivia to">
+            <button type="button" class="tab-btn is-active" id="trivia-bind-tab-word" role="tab" aria-selected="true">Word</button>
+            <button type="button" class="tab-btn" id="trivia-bind-tab-phrase" role="tab" aria-selected="false">Phrase</button>
+          </div>
+          <input type="search" id="trivia-bind-search" placeholder="Search by hanzi, pinyin, or meaning" aria-label="Search for a word or phrase to bind trivia to">
+          <div id="trivia-bind-results" class="candidates"></div>
+        </div>
+
+        <div id="trivia-bind-chosen" class="field" hidden>
+          <label>Bound to</label>
+          <div class="trivia-bound-display">
+            <span id="trivia-bound-text"></span>
+            <button type="button" class="secondary-btn tiny-btn" id="trivia-bind-change-btn">Change</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="trivia-body-input">Trivia <span class="hint">(paragraph text &mdash; insert phrases below)</span></label>
+          <textarea id="trivia-body-input" rows="8" placeholder="Write your trivia here&hellip;"></textarea>
+        </div>
+
+        <div id="trivia-insert-picker" class="field">
+          <label>Insert a phrase <span class="hint">(defaults to phrases containing the bound word; search overrides)</span></label>
+          <input type="search" id="trivia-insert-search" placeholder="Search by hanzi or pinyin" aria-label="Search phrases to insert into the trivia">
+          <div id="trivia-insert-results" class="candidates"></div>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="trivia-save-btn">Save Trivia</button>
+          <button type="button" class="secondary-btn" id="trivia-cancel-btn">Cancel</button>
+        </div>
+        <span id="trivia-editor-error" class="error" role="alert"></span>
+      </div>
+
+      <!-- ---- full article view ---- -->
+      <div id="trivia-full-view" hidden>
+        <button type="button" class="secondary-btn back-btn" id="trivia-full-back-btn">&larr; Back to trivia list</button>
+        <div class="result-card trivia-full-card">
+          <div class="rc-kind" id="trivia-full-kind"></div>
+          <div class="rc-hanzi" id="trivia-full-hanzi"></div>
+          <div class="rc-pinyin" id="trivia-full-pinyin"></div>
+          <div id="trivia-full-body" class="trivia-body"></div>
+          <div class="actions">
+            <button type="button" class="secondary-btn tiny-btn" id="trivia-full-edit-btn">Edit</button>
+            <button type="button" class="secondary-btn tiny-btn" id="trivia-full-delete-btn">Delete</button>
+          </div>
+        </div>
       </div>
     </section>
   </main>

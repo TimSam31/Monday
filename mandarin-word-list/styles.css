@@ -118,6 +118,14 @@ h2 { margin-top: 0; font-size: 1.1rem; }
 }
 
 .field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+/* An explicit display:flex above would otherwise outrank the browser's
+   default [hidden]{display:none} (author styles beat user-agent styles
+   regardless of specificity) whenever a .field is toggled via its own
+   hidden attribute rather than a hidden ancestor's. */
+.field[hidden] {
+  display: none;
+}
 label { font-size: 0.85rem; color: var(--muted); }
 
 input[type="text"], input[type="search"] {
@@ -781,6 +789,178 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+/* ---- Trivia mode ---- */
+
+textarea {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--panel);
+  color: var(--text);
+  resize: vertical;
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.trivia-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.trivia-list-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) 1fr auto;
+  gap: 0.5rem 1rem;
+  align-items: start;
+}
+
+.trivia-list-item .rc-kind {
+  grid-column: 1;
+}
+
+.trivia-list-item .tli-headword {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.trivia-list-item .tli-hanzi {
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+.trivia-list-item .tli-pinyin {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.trivia-list-item .tli-snippet {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.88rem;
+  align-self: center;
+}
+
+.trivia-list-item .tli-actions {
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: flex-end;
+}
+
+.trivia-bound-display {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.trivia-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.trivia-paragraph {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.trivia-phrase-mention {
+  display: inline-block;
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.05rem 0.4rem;
+  font-weight: 600;
+  cursor: default;
+}
+
+.trivia-phrase-mention.trivia-phrase-missing {
+  background: transparent;
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 400;
+  text-decoration: line-through;
+}
+
+/* ---- trivia badge + hover preview (shown next to a word/phrase that has trivia) ---- */
+
+.trivia-badge-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.trivia-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.05rem 0.4rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.trivia-badge:hover,
+.trivia-badge:focus {
+  background: var(--accent);
+  color: #fff;
+}
+
+.trivia-popover {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin-top: 0.3rem;
+  width: 16rem;
+  max-width: 80vw;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  text-align: left;
+}
+
+.trivia-badge-wrap:hover .trivia-popover,
+.trivia-badge-wrap:focus-within .trivia-popover {
+  display: block;
+}
+
+.trivia-popover p {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
 }
 
 @media (max-width: 520px) {

@@ -6,7 +6,7 @@ A small, dependency-free web tool for building a personal Mandarin dictionary: s
 
 Open `index.html` in a browser (double-click it, or serve the folder with any static file server). No build step, no install.
 
-Two modes, switched with the **Vocabulary** / **Quiz** tabs at the top of the page:
+Three modes, switched with the **Vocabulary** / **Quiz** / **Trivia** tabs at the top of the page:
 
 **Vocabulary mode** has three parts, top to bottom:
 
@@ -15,6 +15,8 @@ Two modes, switched with the **Vocabulary** / **Quiz** tabs at the top of the pa
 3. **Your vocabulary** — tabbed, paginated browsing of everything you've saved.
 
 **Quiz mode** is a flashcard-style self-test over what you've saved — see [Quiz mode](#quiz-mode) below.
+
+**Trivia mode** lets you write your own notes/background on a word or phrase, with other phrases embedded inline — see [Trivia mode](#trivia-mode) below.
 
 ## Adding words
 
@@ -80,22 +82,22 @@ Words and Phrases each get their own tab, a quick text filter, and pagination (2
 
 ## Export / Import
 
-- **Export JSON** / **Import JSON** (top toolbar) covers both words and phrases together, as `{"words": [...], "phrases": [...]}`. A plain array (the old format, words-only) still imports fine and is read as legacy words-only data.
+- **Export JSON** / **Import JSON** (top toolbar) covers words, phrases, and trivia together, as `{"words": [...], "phrases": [...], "trivia": [...]}`. A plain array (the old format, words-only) still imports fine and is read as legacy words-only data; a `{"words":...,"phrases":...}` file from before Trivia mode existed imports fine too, with no trivia.
 - **Export CSV** / **Import CSV** are scoped to whichever browse tab is active — Words CSV has `hanzi, pinyin, meaning, createdAt` columns (meaning tags separated by `; `); Phrases CSV has `hanzi, pinyin, meaning, tags, createdAt` (the `tags` column is derived and exported for reference, but ignored on import since tags are never stored). Imported rows are merged into the existing list; duplicates are skipped.
 
 This makes it easy to pass a list between devices or people: export on one, import on the other.
 
 ## Internal browser storage (automatic, no setup)
 
-Beyond `localStorage`, the app also autosaves to a real file the browser manages for you — no folder to pick, no permission prompt. This is the [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API/Origin_private_file_system), sandboxed per-origin and not visible in a normal file browser (Finder/Explorer), which is exactly what lets it skip the picker/permission step. It's a second, independent copy of your data (words and phrases both) — if `localStorage` is ever cleared (private browsing cleanup, "clear site data", etc.), the app recovers your list from here automatically on next load.
+Beyond `localStorage`, the app also autosaves to a real file the browser manages for you — no folder to pick, no permission prompt. This is the [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API/Origin_private_file_system), sandboxed per-origin and not visible in a normal file browser (Finder/Explorer), which is exactly what lets it skip the picker/permission step. It's a second, independent copy of your data (words, phrases, and trivia) — if `localStorage` is ever cleared (private browsing cleanup, "clear site data", etc.), the app recovers your list from here automatically on next load.
 
 It's supported in Chrome and Edge, but **only when the page is served over http/https** — not when opened directly as a `file://` URL (a browser security restriction on that API, unrelated to this app). When active, a small "+ browser-internal backup (automatic)" note appears next to the folder controls. When it's not available (including the common case of just double-clicking `index.html`), the app falls back silently to `localStorage` only — nothing breaks, there's no error, this note just doesn't appear.
 
 ## Local folder autosave (optional, user-visible folder)
 
-`localStorage` alone only lives in one browser profile. **Connect Local Folder** goes further: pick any folder on disk and the app keeps a `mandarin-word-list.json` file in it (both words and phrases) updated automatically on every change — no manual export step.
+`localStorage` alone only lives in one browser profile. **Connect Local Folder** goes further: pick any folder on disk and the app keeps a `mandarin-word-list.json` file in it (words, phrases, and trivia) updated automatically on every change — no manual export step.
 
-- **Connect Local Folder**: choose a folder. If it already has a `mandarin-word-list.json`, its words and phrases are merged into your current list and the merged result is written back.
+- **Connect Local Folder**: choose a folder. If it already has a `mandarin-word-list.json`, its words, phrases, and trivia are merged into your current list and the merged result is written back.
 - Once connected, every change autosaves to that file in the background. The status line next to the button shows the connected folder name.
 - **On reopening the app**, it remembers the last folder and offers a one-click **Reconnect** — browsers require a click (not a fully silent auto-load) to re-grant file access after a restart, for security, but you don't need to re-browse for the folder.
 - **Disconnect** stops autosaving to the folder; your entries remain in `localStorage`.
@@ -124,12 +126,23 @@ A flashcard-style self-test over your own saved words and/or phrases — nothing
 - **Next word** draws another card. Switching *Show* alone re-quizzes the same card from the other angle instead of advancing.
 - Draws never repeat until every card in the current pool (per the *From* setting) has been shown once — a shuffled "deck" that's dealt through before it reshuffles for the next round, so you won't see the same word twice in a row while others are left untouched.
 
+## Trivia mode
+
+Free-text notes/background bound to one specific word or phrase — a personal note card, a mnemonic, cultural context, whatever's useful to remember about that entry. At most one trivia article per word/phrase.
+
+- **+ Add trivia** starts a new article: pick **Word** or **Phrase**, search for the one you mean (by hanzi, pinyin, or meaning), then write the paragraph text.
+- **Insert a phrase** lets you embed any of your saved phrases inline as you write, e.g. "...often paired with **你好**...". By default it suggests phrases already containing whatever you bound the trivia to (or, for a phrase-bound trivia, other phrases sharing its own vocabulary) — type hanzi or pinyin to search instead, and matches sharing that same connection are ranked above the rest. Click one to insert it at the cursor.
+- The trivia list (paginated) shows every article with a short snippet; **View** opens the full article with inserted phrases rendered as highlighted chips (hover one to see its pinyin/meaning); **Edit** and **Delete** are there too. Editing an existing article keeps it bound to the same word/phrase — to change the subject, delete and start over.
+- Once a word or phrase has trivia, a small **Trivia** badge appears next to it everywhere it's shown — the browse tables, search result cards, and phrase lists. Hovering (or focusing) the badge previews the first couple of lines with a button that jumps straight to the full article in Trivia mode. Deleting a word or phrase deletes its trivia along with it.
+- If a phrase mentioned inside a trivia article is later deleted, that mention degrades gracefully to a struck-through "[deleted phrase]" rather than breaking anything.
+
 ## Data format
 
 ```json
 {
   "words": [
     {
+      "id": "m123abc456",
       "hanzi": "你",
       "pinyin": "nǐ",
       "meaning": ["you", "hi"],
@@ -138,16 +151,27 @@ A flashcard-style self-test over your own saved words and/or phrases — nothing
   ],
   "phrases": [
     {
+      "id": "m789xyz012",
       "hanzi": "你好",
       "pinyin": "nǐ hǎo",
       "meaning": "hello",
       "createdAt": "2026-08-09T12:05:00.000Z"
     }
+  ],
+  "trivia": [
+    {
+      "id": "m345def678",
+      "entryType": "word",
+      "entryId": "m123abc456",
+      "body": "A common informal greeting. Often paired with {{phrase:m789xyz012}}.",
+      "createdAt": "2026-08-09T12:10:00.000Z",
+      "updatedAt": "2026-08-09T12:10:00.000Z"
+    }
   ]
 }
 ```
 
-`createdAt` is optional on import; if omitted, the import time is used. A phrase has no `tags` field in storage — tags are always computed from the current word list, never saved.
+`createdAt` is optional on import; if omitted, the import time is used. A phrase has no `tags` field in storage — tags are always computed from the current word list, never saved. `trivia` is optional too — a file exported before Trivia mode existed (or the legacy words-only array format) still imports fine, just with no trivia. A trivia's `body` is plain text with `{{phrase:<id>}}` tokens marking inserted phrases, resolved into rich chips only when displayed — never expanded in storage, so editing or deleting that phrase is reflected everywhere the mention appears with nothing to keep in sync.
 
 ## Hanzi candidate data
 
