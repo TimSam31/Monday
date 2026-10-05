@@ -128,13 +128,13 @@ A flashcard-style self-test over your own saved words and/or phrases — nothing
 
 ## Trivia mode
 
-Free-text notes/background bound to one specific word or phrase — a personal note card, a mnemonic, cultural context, whatever's useful to remember about that entry. At most one trivia article per word/phrase.
+Free-text notes/background bound to any number of words and/or phrases — a personal note card, a mnemonic, cultural context, whatever's useful to remember. It's many-to-many: one article can be tagged to several words/phrases at once, and a single word or phrase can have several trivia articles.
 
-- **+ Add trivia** starts a new article: pick **Word** or **Phrase**, search for the one you mean (by hanzi, pinyin, or meaning), then write the paragraph text.
-- **Insert a phrase** lets you embed any of your saved phrases inline as you write, e.g. "...often paired with **你好**...". By default it suggests phrases already containing whatever you bound the trivia to (or, for a phrase-bound trivia, other phrases sharing its own vocabulary) — type hanzi or pinyin to search instead, and matches sharing that same connection are ranked above the rest. Click one to insert it at the cursor.
-- The trivia list (paginated) shows every article with a short snippet; **View** opens the full article with inserted phrases rendered as highlighted chips (hover one to see its pinyin/meaning); **Edit** and **Delete** are there too. Editing an existing article keeps it bound to the same word/phrase — to change the subject, delete and start over.
-- Once a word or phrase has trivia, a small **Trivia** badge appears next to it everywhere it's shown — the browse tables, search result cards, and phrase lists. Hovering (or focusing) the badge previews the first couple of lines with a button that jumps straight to the full article in Trivia mode. Deleting a word or phrase deletes its trivia along with it.
-- If a phrase mentioned inside a trivia article is later deleted, that mention degrades gracefully to a struck-through "[deleted phrase]" rather than breaking anything.
+- **+ Add trivia** starts a new article: search and pick as many **Word**s and/or **Phrase**s as you want this article to be about — each appears as a removable chip. There's no locking once saved either; open **Edit** any time to add or remove bindings freely.
+- **Insert a word or phrase** lets you embed any of your saved vocabulary inline as you write, e.g. "...often paired with **你好**...". By default it suggests vocabulary already connected to what you've bound so far (words you bound directly, plus for a phrase binding, every word matched inside that phrase) — type hanzi or pinyin to search instead, and matches sharing that same connection are ranked above the rest. Click one to insert it at the cursor.
+- The trivia list (paginated) shows every article with pills for all its bound entries plus a short snippet; **View** opens the full article with inserted mentions rendered as two-line chips (hanzi with its pinyin shown right below); **Edit** and **Delete** are there too.
+- Once a word or phrase has trivia, a small **Trivia** badge appears next to it everywhere it's shown — the browse tables, search result cards, and phrase lists — labeled with a count (e.g. **Trivia (2)**) when there's more than one. Hovering (or focusing) the badge previews each article's first couple of lines with a button that jumps straight to its full article in Trivia mode. Deleting a word or phrase removes it from any article's bindings; an article left with no bindings at all is removed too.
+- If a word or phrase mentioned inside a trivia article is later deleted, that mention degrades gracefully to a struck-through "[deleted word]"/"[deleted phrase]" rather than breaking anything.
 
 ## Data format
 
@@ -161,8 +161,7 @@ Free-text notes/background bound to one specific word or phrase — a personal n
   "trivia": [
     {
       "id": "m345def678",
-      "entryType": "word",
-      "entryId": "m123abc456",
+      "entries": [{ "type": "word", "id": "m123abc456" }],
       "body": "A common informal greeting. Often paired with {{phrase:m789xyz012}}.",
       "createdAt": "2026-08-09T12:10:00.000Z",
       "updatedAt": "2026-08-09T12:10:00.000Z"
@@ -171,7 +170,7 @@ Free-text notes/background bound to one specific word or phrase — a personal n
 }
 ```
 
-`createdAt` is optional on import; if omitted, the import time is used. A phrase has no `tags` field in storage — tags are always computed from the current word list, never saved. `trivia` is optional too — a file exported before Trivia mode existed (or the legacy words-only array format) still imports fine, just with no trivia. A trivia's `body` is plain text with `{{phrase:<id>}}` tokens marking inserted phrases, resolved into rich chips only when displayed — never expanded in storage, so editing or deleting that phrase is reflected everywhere the mention appears with nothing to keep in sync.
+`createdAt` is optional on import; if omitted, the import time is used. A phrase has no `tags` field in storage — tags are always computed from the current word list, never saved. `trivia` is optional too — a file exported before Trivia mode existed (or the legacy words-only array format) still imports fine, just with no trivia. A trivia's `entries` array can hold any number of `{type, id}` bindings (many-to-many). A file exported from before trivia supported multiple bindings, with the older single `{entryType, entryId}` shape, still imports fine too — it's migrated automatically into a one-item `entries` array. A trivia's `body` is plain text with `{{word:<id>}}` / `{{phrase:<id>}}` tokens marking inserted mentions, resolved into rich chips only when displayed — never expanded in storage, so editing or deleting that word/phrase is reflected everywhere the mention appears with nothing to keep in sync.
 
 ## Hanzi candidate data
 

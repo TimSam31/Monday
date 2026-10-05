@@ -274,7 +274,8 @@
         <h3 class="detail-heading" id="trivia-editor-heading">Add trivia</h3>
 
         <div id="trivia-bind-picker" class="field">
-          <label>Bind to <span class="hint">(choose a word or phrase this trivia is about)</span></label>
+          <label>Bind to <span class="hint">(choose one or more words/phrases this trivia is about)</span></label>
+          <div id="trivia-bound-chips" class="tag-input trivia-bound-chips"></div>
           <div class="tabs" role="tablist" aria-label="Bind trivia to">
             <button type="button" class="tab-btn is-active" id="trivia-bind-tab-word" role="tab" aria-selected="true">Word</button>
             <button type="button" class="tab-btn" id="trivia-bind-tab-phrase" role="tab" aria-selected="false">Phrase</button>
@@ -283,22 +284,18 @@
           <div id="trivia-bind-results" class="candidates"></div>
         </div>
 
-        <div id="trivia-bind-chosen" class="field" hidden>
-          <label>Bound to</label>
-          <div class="trivia-bound-display">
-            <span id="trivia-bound-text"></span>
-            <button type="button" class="secondary-btn tiny-btn" id="trivia-bind-change-btn">Change</button>
-          </div>
-        </div>
-
         <div class="field">
-          <label for="trivia-body-input">Trivia <span class="hint">(paragraph text &mdash; insert phrases below)</span></label>
+          <label for="trivia-body-input">Trivia <span class="hint">(paragraph text &mdash; insert words/phrases below)</span></label>
           <textarea id="trivia-body-input" rows="8" placeholder="Write your trivia here&hellip;"></textarea>
         </div>
 
         <div id="trivia-insert-picker" class="field">
-          <label>Insert a phrase <span class="hint">(defaults to phrases containing the bound word; search overrides)</span></label>
-          <input type="search" id="trivia-insert-search" placeholder="Search by hanzi or pinyin" aria-label="Search phrases to insert into the trivia">
+          <label>Insert a word or phrase <span class="hint">(defaults to vocabulary connected to what you've bound; search overrides)</span></label>
+          <div class="tabs" role="tablist" aria-label="Insert type">
+            <button type="button" class="tab-btn" id="trivia-insert-tab-word" role="tab" aria-selected="false">Word</button>
+            <button type="button" class="tab-btn is-active" id="trivia-insert-tab-phrase" role="tab" aria-selected="true">Phrase</button>
+          </div>
+          <input type="search" id="trivia-insert-search" placeholder="Search by hanzi or pinyin" aria-label="Search words or phrases to insert into the trivia">
           <div id="trivia-insert-results" class="candidates"></div>
         </div>
 
@@ -313,9 +310,7 @@
       <div id="trivia-full-view" hidden>
         <button type="button" class="secondary-btn back-btn" id="trivia-full-back-btn">&larr; Back to trivia list</button>
         <div class="result-card trivia-full-card">
-          <div class="rc-kind" id="trivia-full-kind"></div>
-          <div class="rc-hanzi" id="trivia-full-hanzi"></div>
-          <div class="rc-pinyin" id="trivia-full-pinyin"></div>
+          <div id="trivia-full-entries" class="trivia-entry-pills"></div>
           <div id="trivia-full-body" class="trivia-body"></div>
           <div class="actions">
             <button type="button" class="secondary-btn tiny-btn" id="trivia-full-edit-btn">Edit</button>

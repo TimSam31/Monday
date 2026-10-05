@@ -824,54 +824,53 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
-  display: grid;
-  grid-template-columns: minmax(5rem, auto) 1fr auto;
-  gap: 0.5rem 1rem;
-  align-items: start;
-}
-
-.trivia-list-item .rc-kind {
-  grid-column: 1;
-}
-
-.trivia-list-item .tli-headword {
-  grid-column: 1;
-  grid-row: 1 / span 2;
-}
-
-.trivia-list-item .tli-hanzi {
-  font-size: 1.3rem;
-  line-height: 1.2;
-}
-
-.trivia-list-item .tli-pinyin {
-  color: var(--accent);
-  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .trivia-list-item .tli-snippet {
-  grid-column: 2;
   color: var(--muted);
   font-size: 0.88rem;
-  align-self: center;
 }
 
 .trivia-list-item .tli-actions {
-  grid-column: 3;
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  align-items: flex-end;
+  gap: 0.4rem;
 }
 
-.trivia-bound-display {
+/* ---- bound-entry pills (list rows, full-article header, chip picker) ---- */
+
+.trivia-entry-pills {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.trivia-entry-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
   background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.trivia-entry-pill .tep-kind {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.trivia-entry-pill .tep-hanzi {
+  font-weight: 600;
+}
+
+.trivia-bound-chips {
+  min-height: 2.2rem;
 }
 
 .trivia-body {
@@ -883,21 +882,35 @@ textarea {
 
 .trivia-paragraph {
   margin: 0;
-  line-height: 1.6;
+  line-height: 1.8;
 }
 
-.trivia-phrase-mention {
-  display: inline-block;
+/* A mention is two lines (hanzi + pinyin) inline within flowing text. */
+.trivia-mention {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
   background: var(--bg);
-  color: var(--accent);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 0.05rem 0.4rem;
-  font-weight: 600;
+  margin: 0 0.1rem;
+  line-height: 1.25;
   cursor: default;
 }
 
-.trivia-phrase-mention.trivia-phrase-missing {
+.trivia-mention .tm-hanzi {
+  font-weight: 600;
+}
+
+.trivia-mention .tm-pinyin {
+  color: var(--accent);
+  font-size: 0.7rem;
+}
+
+.trivia-mention.trivia-mention-missing {
   background: transparent;
   color: var(--muted);
   font-style: italic;
@@ -961,6 +974,12 @@ textarea {
   font-size: 0.82rem;
   color: var(--text);
   line-height: 1.4;
+}
+
+.trivia-popover-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.6rem 0;
 }
 
 @media (max-width: 520px) {
