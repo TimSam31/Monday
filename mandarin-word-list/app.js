@@ -1195,6 +1195,27 @@
     return (phraseInputHasCjk() ? phraseInput.value : phraseHanziBuffer).trim();
   }
 
+  // Like getPhraseFinalHanzi(), but for the live reference rows only: while
+  // typing pinyin, the confirmed buffer only grows once a candidate is
+  // actually clicked, so the reference rows would otherwise sit frozen on
+  // whatever was last confirmed while the current syllable is being typed.
+  // This appends a best-guess hanzi (the top candidate, same source as the
+  // candidates panel) for the in-progress syllable once it has a tone
+  // digit, exactly mirroring when the candidates panel itself goes live --
+  // never used for the actual saved hanzi, the Tags preview, or anything
+  // else that must reflect only confirmed content.
+  function getPhraseLiveReferenceHanzi() {
+    if (phraseInputHasCjk()) return phraseInput.value.trim();
+    var token = lastSyllableToken(phraseInput);
+    var guess = "";
+    if (/[1-5]$/.test(token)) {
+      var converted = convertSyllable(token);
+      var candidates = PINYIN_HANZI_DATA[converted];
+      if (candidates && candidates.length) guess = candidates[0][0];
+    }
+    return (phraseHanziBuffer + guess).trim();
+  }
+
   function updatePhrasePreview() {
     var text = phraseInputHasCjk() ? phraseInput.value : phraseHanziBuffer;
     phraseHanziPreview.textContent = text || " ";
@@ -1319,9 +1340,9 @@
       phraseCedictChipsEl.appendChild(loading);
 
       loadCedict().then(function () {
-        if (getPhraseFinalHanzi() === hanzi) renderPhraseCedictRow(hanzi);
+        if (getPhraseLiveReferenceHanzi() === hanzi) renderPhraseCedictRow(hanzi);
       }).catch(function () {
-        if (getPhraseFinalHanzi() !== hanzi) return;
+        if (getPhraseLiveReferenceHanzi() !== hanzi) return;
         phraseCedictChipsEl.innerHTML = "";
         var err = document.createElement("span");
         err.className = "hint";
@@ -1340,7 +1361,7 @@
   }
 
   function renderPhraseReference() {
-    var hanzi = getPhraseFinalHanzi();
+    var hanzi = getPhraseLiveReferenceHanzi();
     if (!hanzi) {
       phraseReferenceEl.hidden = true;
       phraseVocabChipsEl.innerHTML = "";

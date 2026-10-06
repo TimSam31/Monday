@@ -50,6 +50,8 @@ As soon as there's any hanzi in the phrase (typed via candidates or pasted), two
 - **From your vocabulary** — your own saved words found inside the phrase, each shown as a small hanzi/pinyin/meaning chip.
 - **Dictionary reference (CC-CEDICT)** — the same, but against the bundled [CC-CEDICT](#dictionary-reference-cc-cedict) dictionary (lazy-loaded on first use, same as the Search panel), so you can spot valid dictionary words in the phrase even before you've saved them yourself.
 
+Both rows track the syllable you're currently typing, not just what's already been clicked into the phrase — the instant a tone digit completes a syllable (e.g. `hao3`), both rows preview that character's likely match immediately, the same way the hanzi candidates panel itself goes live, rather than waiting for you to click a candidate first. This live preview never affects what actually gets saved — only a clicked (or pasted) candidate becomes real hanzi.
+
 Both rows are capped at 5 chips (longest match first), with a **Show N more** chip that expands the rest — a long sentence can easily contain more than 5 recognized chunks, so this can wrap into several rows.
 
 **Clear** (next to **Add Phrase**) resets just the hanzi side of the form — the phrase input, the pinyin field, any in-progress candidates, and these two reference rows — without touching whatever you've already typed in Meaning.
