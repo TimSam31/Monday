@@ -638,6 +638,15 @@ td.phrase-meaning-cell { font-style: italic; color: var(--muted); }
   color: var(--muted);
 }
 
+/* ---- phrase form: insert a saved word directly (bypasses pinyin candidates) ---- */
+
+.phrase-word-insert {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
 /* ---- phrase form: live reference rows (known vocabulary + CC-CEDICT) ---- */
 
 .phrase-reference {

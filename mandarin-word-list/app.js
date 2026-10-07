@@ -1180,6 +1180,8 @@
   var phraseInput = document.getElementById("phrase-input");
   var phraseHanziPreview = document.getElementById("phrase-hanzi-preview");
   var phraseCandidatesPanel = document.getElementById("phrase-candidates-panel");
+  var phraseWordInsertSearchInput = document.getElementById("phrase-word-insert-search");
+  var phraseWordInsertResultsEl = document.getElementById("phrase-word-insert-results");
   var phrasePinyinInput = document.getElementById("phrase-pinyin-input");
   var phraseMeaningInput = document.getElementById("phrase-meaning-input");
   var phraseTagsPreview = document.getElementById("phrase-tags-preview");
@@ -1418,6 +1420,81 @@
       phraseCandidatesPanel.appendChild(btn);
     });
   }
+
+  // ---- insert a saved word directly, bypassing the pinyin-candidate list ----
+  //
+  // The pinyin candidates above only ever draw from the bundled single-
+  // character frequency data, which doesn't cover every word someone
+  // might have registered. Searching your own vocabulary here instead
+  // guarantees any word you've already saved can go into a phrase.
+
+  function insertWordIntoPhrase(word) {
+    if (phraseInputHasCjk()) {
+      phraseInput.value += word.hanzi;
+    } else {
+      phraseHanziBuffer += word.hanzi;
+      var hasTrailingToken = phraseInput.value.trim() !== "" && !/\s$/.test(phraseInput.value);
+      phraseInput.value = (hasTrailingToken
+        ? phraseInput.value.replace(/\S+$/, word.pinyin)
+        : phraseInput.value + word.pinyin) + " ";
+      phrasePinyinInput.value = convertPinyin(phraseInput.value);
+    }
+    updatePhrasePreview();
+    updatePhraseTagsPreview();
+    phraseVocabExpanded = false;
+    phraseCedictExpanded = false;
+    renderPhraseReference();
+    clearPhraseCandidates();
+    phraseInput.focus();
+  }
+
+  function computePhraseWordInsertCandidates(query) {
+    var q = query.trim().toLowerCase();
+    var qPlain = stripDiacritics(q);
+    if (!q) return entries.slice().sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 20);
+    return entries.filter(function (w) {
+      return w.hanzi.toLowerCase().indexOf(q) !== -1 ||
+        stripDiacritics(w.pinyin.toLowerCase()).indexOf(qPlain) !== -1 ||
+        w.meaning.some(function (t) { return t.toLowerCase().indexOf(q) !== -1; });
+    });
+  }
+
+  function renderPhraseWordInsertResults() {
+    var candidates = computePhraseWordInsertCandidates(phraseWordInsertSearchInput.value);
+    phraseWordInsertResultsEl.innerHTML = "";
+    if (!candidates.length) {
+      var none = document.createElement("span");
+      none.className = "hint";
+      none.textContent = "No matching words.";
+      phraseWordInsertResultsEl.appendChild(none);
+      return;
+    }
+
+    candidates.slice(0, 20).forEach(function (word) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "candidate-btn";
+      btn.title = "Insert " + word.hanzi + " into the phrase";
+
+      var charSpan = document.createElement("span");
+      charSpan.className = "cb-char";
+      charSpan.textContent = word.hanzi;
+      var pinyinSpan = document.createElement("span");
+      pinyinSpan.className = "cb-pinyin";
+      pinyinSpan.textContent = word.pinyin;
+      var defSpan = document.createElement("span");
+      defSpan.className = "cb-def";
+      defSpan.textContent = word.meaning.join(", ");
+
+      btn.appendChild(charSpan);
+      btn.appendChild(pinyinSpan);
+      btn.appendChild(defSpan);
+      btn.addEventListener("click", function () { insertWordIntoPhrase(word); });
+      phraseWordInsertResultsEl.appendChild(btn);
+    });
+  }
+
+  phraseWordInsertSearchInput.addEventListener("input", renderPhraseWordInsertResults);
 
   phraseInput.addEventListener("input", function () {
     if (phraseInputHasCjk()) {
@@ -1937,6 +2014,7 @@
     renderWordTable();
     renderPhraseTable();
     renderSearch();
+    renderPhraseWordInsertResults();
     if (quizSectionEl && !quizSectionEl.hidden) renderQuizCard();
     if (triviaSectionEl && !triviaSectionEl.hidden) renderTriviaMode();
   }

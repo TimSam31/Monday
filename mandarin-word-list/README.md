@@ -36,6 +36,7 @@ Phrases are example sentences. One input auto-detects what you're giving it:
 
 - **Type pinyin** (tone numbers) and it behaves exactly like the word form: candidates appear per syllable, click one to build up the sentence's Hanzi character by character, and the Pinyin field fills in alongside it.
 - **Paste Hanzi directly** and it's taken as-is — no candidate picking needed.
+- **Or insert a saved word directly**, searching by hanzi, pinyin, or meaning across your own vocabulary — useful since the pinyin candidates above only draw from the bundled single-character frequency data, which won't include every word you've registered. Clicking a result inserts it the same way a candidate click does: replacing an in-progress (uncommitted) pinyin syllable if you're mid-typing one, or appending otherwise — so it mixes freely with the other two methods.
 
 A phrase's **Meaning** is a single plain-text field (e.g. "how are you"), not tags — it's for display only and is never matched by search. **Tags aren't entered manually**: they're derived automatically from every saved word whose hanzi appears inside the phrase (plain substring match), recomputed live every time you view the phrase — so editing or deleting a word instantly updates every phrase's tags with nothing to re-save.
 
