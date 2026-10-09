@@ -882,6 +882,16 @@ textarea {
   min-height: 2.2rem;
 }
 
+/* Overrides .result-card's 2-column grid (headword | tags) that this
+   element otherwise inherits: here there's no headword column, so the
+   bound-entry pills and the body text should simply stack, not sit side
+   by side in the grid's implicit first row. */
+.trivia-full-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .trivia-body {
   display: flex;
   flex-direction: column;
@@ -892,6 +902,7 @@ textarea {
 .trivia-paragraph {
   margin: 0;
   line-height: 1.8;
+  white-space: pre-line;
 }
 
 /* A mention is two lines (hanzi + pinyin) inline within flowing text. */
