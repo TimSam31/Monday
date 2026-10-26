@@ -125,9 +125,11 @@ A flashcard-style self-test over your own saved words and/or phrases — nothing
 
 - **From**: quiz from **Words**, **Phrases**, or **Both**.
 - **Show**: whether each card leads with **Hanzi** (guess the pinyin/meaning), **Meaning** (guess the hanzi), or **Randomize** (picks one or the other per card).
-- The hidden side (pinyin is always part of it, plus whichever of hanzi/meaning isn't the prompt) stays hidden until you click **Show answer**.
-- **Next word** draws another card. Switching *Show* alone re-quizzes the same card from the other angle instead of advancing.
+- The hidden side (pinyin is always part of it, plus whichever of hanzi/meaning isn't the prompt) stays hidden until you reveal it.
+- **Next word** does double duty: the first press reveals the current card's answer; once revealed, the next press moves on to a new card (answer hidden again). Switching *Show* alone re-quizzes the same card from the other angle instead of advancing.
+- **Previous word** steps back to the card you were just on, answer hidden, regardless of whether you'd revealed it — handy for a quick re-drill. It's greyed out at the start of your current run since there's nothing before it yet. Stepping forward again replays the exact same card you stepped back from before drawing anything new, so backtracking never skips or reshuffles cards.
 - Draws never repeat until every card in the current pool (per the *From* setting) has been shown once — a shuffled "deck" that's dealt through before it reshuffles for the next round, so you won't see the same word twice in a row while others are left untouched.
+- If the revealed card has any Trivia articles bound to it, they're listed right below the buttons in a compact snippet view, each with a **View full trivia** button that jumps to its full article in Trivia mode.
 
 ## Trivia mode
 

@@ -2836,9 +2836,10 @@
   var quizHanziEl = document.getElementById("quiz-hanzi");
   var quizPinyinEl = document.getElementById("quiz-pinyin");
   var quizMeaningEl = document.getElementById("quiz-meaning");
-  var quizRevealBtn = document.getElementById("quiz-reveal-btn");
+  var quizPrevBtn = document.getElementById("quiz-prev-btn");
   var quizNextBtn = document.getElementById("quiz-next-btn");
   var quizProgressEl = document.getElementById("quiz-progress");
+  var quizTriviaListEl = document.getElementById("quiz-trivia-list");
   var quizSourceBtns = document.querySelectorAll("[data-quiz-source]");
   var quizPromptBtns = document.querySelectorAll("[data-quiz-prompt]");
 
@@ -2846,6 +2847,8 @@
   var quizPromptSetting = "hanzi"; // "hanzi" | "meaning" | "random"
   var quizBag = []; // shuffled {type, id} refs for the current pass
   var quizBagIndex = -1; // index of the currently-drawn card within quizBag
+  var quizHistory = []; // sequence of cards shown this pass: {ref, side}
+  var quizHistoryIndex = -1; // position within quizHistory currently on screen
   var quizCurrentRef = null;
   var quizCurrentItem = null;
   var quizCurrentSide = "hanzi"; // resolved prompt side for the current card
@@ -2908,12 +2911,89 @@
     return null;
   }
 
-  function startNewQuizCard() {
-    var drawn = drawNextQuizCard();
-    quizCurrentRef = drawn ? drawn.ref : null;
-    quizCurrentItem = drawn ? drawn.item : null;
-    quizCurrentSide = pickPromptSide();
+  // Mirrors the card at quizHistory[quizHistoryIndex] into the "current"
+  // vars the rest of renderQuizCard reads.
+  function syncCurrentFromHistory() {
+    var h = quizHistory[quizHistoryIndex];
+    quizCurrentRef = h ? h.ref : null;
+    quizCurrentItem = h ? resolveQuizItem(h.ref) : null;
+    quizCurrentSide = h ? h.side : "hanzi";
+  }
+
+  // Moves forward: replays a card you'd stepped back from (if any), or
+  // draws a fresh one from the shuffle bag and appends it to history.
+  function goToNextQuizCard() {
+    if (quizHistoryIndex < quizHistory.length - 1) {
+      quizHistoryIndex++;
+    } else {
+      var drawn = drawNextQuizCard();
+      if (!drawn) {
+        quizHistory = [];
+        quizHistoryIndex = -1;
+        quizCurrentRef = null;
+        quizCurrentItem = null;
+        return;
+      }
+      quizHistory.push({ ref: drawn.ref, side: pickPromptSide() });
+      quizHistoryIndex = quizHistory.length - 1;
+    }
     quizRevealed = false;
+    syncCurrentFromHistory();
+  }
+
+  // Moves back to the previous card already seen this pass, answer
+  // hidden -- never draws a new card.
+  function goToPreviousQuizCard() {
+    if (quizHistoryIndex <= 0) return;
+    quizHistoryIndex--;
+    quizRevealed = false;
+    syncCurrentFromHistory();
+  }
+
+  function startNewQuizCard() {
+    quizHistory = [];
+    quizHistoryIndex = -1;
+    goToNextQuizCard();
+  }
+
+  // Trivia bound to the card on screen, shown only once the answer is
+  // revealed -- reuses the Trivia mode's own lookup/snippet/full-view
+  // helpers (defined further down this file; function declarations are
+  // hoisted, so calling them here is safe).
+  function renderQuizTriviaList() {
+    var matches = quizCurrentRef ? triviaForEntry(quizCurrentRef.type, quizCurrentRef.id) : [];
+    if (!quizRevealed || !matches.length) {
+      quizTriviaListEl.hidden = true;
+      quizTriviaListEl.innerHTML = "";
+      return;
+    }
+
+    quizTriviaListEl.innerHTML = "";
+    var heading = document.createElement("div");
+    heading.className = "quiz-trivia-heading";
+    heading.textContent = matches.length > 1 ? "Trivia (" + matches.length + ")" : "Trivia";
+    quizTriviaListEl.appendChild(heading);
+
+    matches.forEach(function (t) {
+      var item = document.createElement("div");
+      item.className = "quiz-trivia-item";
+
+      var snippet = document.createElement("p");
+      snippet.className = "quiz-trivia-snippet";
+      snippet.textContent = triviaSnippet(t.body, 220);
+
+      var viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "secondary-btn tiny-btn";
+      viewBtn.textContent = "View full trivia";
+      viewBtn.addEventListener("click", function () { openTriviaFullView(t.id); });
+
+      item.appendChild(snippet);
+      item.appendChild(viewBtn);
+      quizTriviaListEl.appendChild(item);
+    });
+
+    quizTriviaListEl.hidden = false;
   }
 
   function renderQuizCard() {
@@ -2921,6 +3001,8 @@
       quizEmptyEl.hidden = false;
       quizCardEl.hidden = true;
       quizProgressEl.textContent = "";
+      quizPrevBtn.disabled = true;
+      quizTriviaListEl.hidden = true;
       return;
     }
     quizEmptyEl.hidden = true;
@@ -2930,6 +3012,7 @@
 
     if (!quizCurrentItem) {
       quizCardEl.hidden = true;
+      quizTriviaListEl.hidden = true;
       return;
     }
 
@@ -2949,20 +3032,29 @@
     quizHanziEl.hidden = !showHanzi;
     quizMeaningEl.hidden = !showMeaning;
     quizPinyinEl.hidden = !quizRevealed;
-    quizRevealBtn.hidden = quizRevealed;
+
+    quizPrevBtn.disabled = quizHistoryIndex <= 0;
+
+    renderQuizTriviaList();
 
     quizProgressEl.textContent = quizBag.length
       ? "Card " + (quizBagIndex + 1) + " of " + quizBag.length + " this round (no repeats until it reshuffles)"
       : "";
   }
 
-  quizRevealBtn.addEventListener("click", function () {
-    quizRevealed = true;
+  quizPrevBtn.addEventListener("click", function () {
+    goToPreviousQuizCard();
     renderQuizCard();
   });
 
+  // First press reveals the answer; once revealed, the next press moves
+  // forward to a new card (with the answer hidden again).
   quizNextBtn.addEventListener("click", function () {
-    startNewQuizCard();
+    if (!quizRevealed && quizCurrentItem) {
+      quizRevealed = true;
+    } else {
+      goToNextQuizCard();
+    }
     renderQuizCard();
   });
 
@@ -2984,6 +3076,7 @@
       if (quizCurrentRef) {
         quizCurrentSide = pickPromptSide();
         quizRevealed = false;
+        if (quizHistory[quizHistoryIndex]) quizHistory[quizHistoryIndex].side = quizCurrentSide;
       }
       renderQuizCard();
     });
